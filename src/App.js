@@ -3,118 +3,85 @@ import './App.css';
 import BarcodeScanner from './components/BarcodeScanner';
 import CameraCapture from './components/CameraCapture';
 import FoodForm from './components/FoodForm';
-import FoodList from './components/FoodList';
 
 function App() {
-  const [activeTab, setActiveTab] = useState('scan');
-  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
-  const [showCamera, setShowCamera] = useState(false);
-  const [showForm, setShowForm] = useState(false);
-  
-  const [scannedBarcode, setScannedBarcode] = useState(null);
-  const [capturedPhoto, setCapturedPhoto] = useState(null);
+  const [step, setStep] = useState('home');
+  const [barcode, setBarcode] = useState('');
   const [nutritionData, setNutritionData] = useState(null);
+  const [photoBlob, setPhotoBlob] = useState(null);
 
-  const handleBarcodeScanned = (barcode) => {
-    setScannedBarcode(barcode);
-    setShowBarcodeScanner(false);
-    setShowCamera(true);
-  };
-
-  const handlePhotoCapture = (photoBlob, nutrition) => {
-    setCapturedPhoto(photoBlob);
-    setNutritionData(nutrition);
-    setShowCamera(false);
-    setShowForm(true);
-  };
-
-  const handleFormComplete = () => {
-    setScannedBarcode(null);
-    setCapturedPhoto(null);
+  const resetApp = () => {
+    setStep('home');
+    setBarcode('');
     setNutritionData(null);
-    setShowForm(false);
-    setActiveTab('database');
+    setPhotoBlob(null);
   };
 
-  const startNewScan = () => {
-    setScannedBarcode(null);
-    setCapturedPhoto(null);
-    setNutritionData(null);
-    setShowForm(false);
-    setShowCamera(false);
-    setShowBarcodeScanner(true);
+  // Fixed transition logic to prevent camera black screen
+  const handleBarcodeScanned = (code) => {
+    setBarcode(code);
+    setStep('transitioning');
+    
+    // 600ms buffer allows the browser to release the camera from Quagga
+    setTimeout(() => {
+      setStep('capture');
+    }, 600);
+  };
+
+  const handleCapture = (blob, data) => {
+    setPhotoBlob(blob);
+    setNutritionData(data);
+    setStep('form');
   };
 
   return (
-    <div className="app">
-      <div className="app-header">
-        <h1 className="app-title">Calorie Capture</h1>
-        <p className="app-subtitle">Build Your Personal Food Database</p>
-      </div>
+    <div className="container">
+      <header className="header">
+        <h1 className="logo">Calorie<span>Capture</span></h1>
+        <p className="tagline">Scan. Track. Achieve.</p>
+      </header>
 
-      <div className="nav-tabs">
-        <button 
-          className={`nav-tab ${activeTab === 'scan' ? 'active' : ''}`}
-          onClick={() => setActiveTab('scan')}
-        >
-          📷 Scan
-        </button>
-        <button 
-          className={`nav-tab ${activeTab === 'database' ? 'active' : ''}`}
-          onClick={() => setActiveTab('database')}
-        >
-          📊 Database
-        </button>
-      </div>
-
-      {activeTab === 'scan' && (
-        <div>
-          {!showBarcodeScanner && !showCamera && !showForm && (
-            <div className="card">
-              <h3 style={{ marginBottom: '20px', color: 'var(--accent-pink)' }}>
-                Start New Entry
-              </h3>
-              <button 
-                className="btn btn-primary btn-full"
-                onClick={startNewScan}
-              >
-                📷 Scan Barcode & Capture Label
-              </button>
-              <p style={{ textAlign: 'center', color: 'var(--text-secondary)', marginTop: '16px', fontSize: '0.9rem' }}>
-                Scan product barcode, then photograph the nutrition label to add to your database
-              </p>
-            </div>
-          )}
-
-          {showBarcodeScanner && (
-            <BarcodeScanner
-              onScan={handleBarcodeScanned}
-              onClose={() => setShowBarcodeScanner(false)}
-            />
-          )}
-
-          {showCamera && (
-            <CameraCapture
-              onCapture={handlePhotoCapture}
-              onClose={() => {
-                setShowCamera(false);
-                setScannedBarcode(null);
-              }}
-            />
-          )}
-
-          {showForm && (
-            <FoodForm
-              barcode={scannedBarcode}
-              nutritionData={nutritionData}
-              photoBlob={capturedPhoto}
-              onComplete={handleFormComplete}
-            />
-          )}
+      {step === 'home' && (
+        <div className="card">
+          <div className="hero-icon">📸</div>
+          <h2 style={{ textAlign: 'center', marginBottom: '16px' }}>Start Tracking</h2>
+          <p style={{ textAlign: 'center', color: 'var(--text-secondary)', marginBottom: '24px' }}>
+            Scan a barcode or take a photo of a nutrition label to instantly log your food.
+          </p>
+          <button className="btn btn-primary btn-full" onClick={() => setStep('scanner')}>
+            🔍 Scan Barcode
+          </button>
+          <button className="btn btn-secondary btn-full" onClick={() => setStep('capture')}>
+            📷 Take Photo Only
+          </button>
         </div>
       )}
 
-      {activeTab === 'database' && <FoodList />}
+      {step === 'scanner' && (
+        <BarcodeScanner onScan={handleBarcodeScanned} onClose={resetApp} />
+      )}
+
+      {step === 'transitioning' && (
+        <div className="card">
+          <div className="status-message status-loading">
+            <div className="spinner"></div>
+            Resetting camera for label capture...
+          </div>
+        </div>
+      )}
+
+      {step === 'capture' && (
+        <CameraCapture onCapture={handleCapture} onClose={resetApp} />
+      )}
+
+      {step === 'form' && (
+        <FoodForm 
+          barcode={barcode} 
+          nutritionData={nutritionData} 
+          photoBlob={photoBlob} 
+          onComplete={resetApp} 
+        />
+      )}
     </div>
   );
 }
