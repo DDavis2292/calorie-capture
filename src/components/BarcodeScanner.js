@@ -1,19 +1,16 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Quagga from 'quagga';
 
 const BarcodeScanner = ({ onScan, onClose }) => {
   const scannerRef = useRef(null);
   const [isScanning, setIsScanning] = useState(false);
 
-  const stopScanner = useCallback(() => {
-    if (isScanning) {
-      Quagga.offDetected(); // Stop listening before stopping hardware
-      Quagga.stop();
-      setIsScanning(false);
-    }
-  }, [isScanning]);
+  useEffect(() => {
+    startScanner();
+    return () => stopScanner();
+  }, []);
 
-  const startScanner = useCallback(() => {
+  const startScanner = () => {
     Quagga.init({
       inputStream: {
         name: "Live",
@@ -25,7 +22,14 @@ const BarcodeScanner = ({ onScan, onClose }) => {
         },
       },
       decoder: {
-        readers: ["ean_reader", "upc_reader", "code_128_reader"]
+        readers: [
+          "ean_reader",
+          "ean_8_reader",
+          "upc_reader",
+          "upc_e_reader",
+          "code_128_reader",
+          "code_39_reader"
+        ]
       },
       locate: true
     }, (err) => {
@@ -39,24 +43,33 @@ const BarcodeScanner = ({ onScan, onClose }) => {
 
     Quagga.onDetected((result) => {
       const code = result.codeResult.code;
+      console.log("Barcode detected:", code);
       onScan(code);
       stopScanner();
     });
-  }, [onScan, stopScanner]);
+  };
 
-  useEffect(() => {
-    startScanner();
-    return () => stopScanner();
-  }, [startScanner, stopScanner]);
+  const stopScanner = () => {
+    if (isScanning) {
+      Quagga.stop();
+      setIsScanning(false);
+    }
+  };
 
   return (
     <div className="card">
-      <h3 style={{ marginBottom: '16px', color: 'var(--accent-pink)' }}>Scan Barcode</h3>
+      <h3 style={{ marginBottom: '16px', color: 'var(--accent-pink)' }}>
+        Scan Barcode
+      </h3>
       <div className="camera-viewport" ref={scannerRef}>
         <div className="camera-overlay"></div>
       </div>
-      <div className="status-message status-loading">Point camera at barcode...</div>
-      <button className="btn btn-secondary btn-full" onClick={onClose}>Cancel</button>
+      <div className="status-message status-loading">
+        Point camera at barcode...
+      </div>
+      <button className="btn btn-secondary btn-full" onClick={onClose}>
+        Cancel
+      </button>
     </div>
   );
 };

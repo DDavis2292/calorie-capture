@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import Tesseract from 'tesseract.js';
 
 const CameraCapture = ({ onCapture, onClose }) => {
@@ -8,15 +8,12 @@ const CameraCapture = ({ onCapture, onClose }) => {
   const [capturing, setCapturing] = useState(false);
   const [processing, setProcessing] = useState(false);
 
-  // Memoize stopCamera so it can be safely used in the useEffect dependency array
-  const stopCamera = useCallback(() => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-    }
-  }, [stream]);
+  useEffect(() => {
+    startCamera();
+    return () => stopCamera();
+  }, []);
 
-  // Memoize startCamera to prevent unnecessary re-renders
-  const startCamera = useCallback(async () => {
+  const startCamera = async () => {
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment', width: 1920, height: 1080 }
@@ -29,12 +26,13 @@ const CameraCapture = ({ onCapture, onClose }) => {
       console.error("Camera access error:", err);
       alert("Cannot access camera. Please check permissions.");
     }
-  }, []);
+  };
 
-  useEffect(() => {
-    startCamera();
-    return () => stopCamera();
-  }, [startCamera, stopCamera]); // Added dependencies to satisfy ESLint
+  const stopCamera = () => {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+    }
+  };
 
   const checkBlur = (imageData) => {
     const canvas = document.createElement('canvas');
