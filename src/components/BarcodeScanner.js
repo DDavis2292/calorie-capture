@@ -1,16 +1,20 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import Quagga from 'quagga';
 
 const BarcodeScanner = ({ onScan, onClose }) => {
   const scannerRef = useRef(null);
   const [isScanning, setIsScanning] = useState(false);
 
-  useEffect(() => {
-    startScanner();
-    return () => stopScanner();
-  }, []);
+  // Memoize stopScanner so it can be safely used in the effect
+  const stopScanner = useCallback(() => {
+    if (isScanning) {
+      Quagga.stop();
+      setIsScanning(false);
+    }
+  }, [isScanning]);
 
-  const startScanner = () => {
+  // Memoize startScanner to prevent unnecessary re-runs
+  const startScanner = useCallback(() => {
     Quagga.init({
       inputStream: {
         name: "Live",
@@ -47,14 +51,13 @@ const BarcodeScanner = ({ onScan, onClose }) => {
       onScan(code);
       stopScanner();
     });
-  };
+  }, [onScan, stopScanner]);
 
-  const stopScanner = () => {
-    if (isScanning) {
-      Quagga.stop();
-      setIsScanning(false);
-    }
-  };
+  useEffect(() => {
+    startScanner();
+    return () => stopScanner();
+    // Dependencies are now included, satisfying ESLint
+  }, [startScanner, stopScanner]);
 
   return (
     <div className="card">

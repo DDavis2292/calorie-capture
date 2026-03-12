@@ -32,7 +32,8 @@ const FoodForm = ({ barcode, nutritionData, photoBlob, onComplete }) => {
 
       if (photoBlob) {
         const fileName = `${Date.now()}_${formData.name.replace(/\s/g, '_')}.jpg`;
-        const { data: uploadData, error: uploadError } = await supabase.storage
+        // Removed 'uploadData' assignment to fix 'no-unused-vars' error
+        const { error: uploadError } = await supabase.storage
           .from('nutrition-labels')
           .upload(fileName, photoBlob);
 
@@ -45,7 +46,8 @@ const FoodForm = ({ barcode, nutritionData, photoBlob, onComplete }) => {
         imageUrl = publicUrl;
       }
 
-      const { data, error } = await supabase
+      // Removed 'data' assignment to fix 'no-unused-vars' error
+      const { error } = await supabase
         .from('foods')
         .insert([
           {
