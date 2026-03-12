@@ -32,9 +32,7 @@ const FoodForm = ({ barcode, nutritionData, photoBlob, onComplete }) => {
 
       if (photoBlob) {
         const fileName = `${Date.now()}_${formData.name.replace(/\s/g, '_')}.jpg`;
-        
-        // We keep the upload call, but we don't assign 'data: uploadData' 
-        // since you weren't using that variable. This fixes the Vercel error.
+        // Removed 'uploadData' assignment to fix 'no-unused-vars' error
         const { error: uploadError } = await supabase.storage
           .from('nutrition-labels')
           .upload(fileName, photoBlob);
@@ -48,8 +46,7 @@ const FoodForm = ({ barcode, nutritionData, photoBlob, onComplete }) => {
         imageUrl = publicUrl;
       }
 
-      // We keep the insert call, but we don't assign the unused 'data' variable.
-      // This ensures your database entry is created exactly as before.
+      // Removed 'data' assignment to fix 'no-unused-vars' error
       const { error } = await supabase
         .from('foods')
         .insert([
