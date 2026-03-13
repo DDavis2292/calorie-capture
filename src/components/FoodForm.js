@@ -4,27 +4,27 @@ import CameraCapture from './CameraCapture';
 
 const FoodForm = ({ initialBarcode, onComplete, onCancel, onScanBarcode }) => {
   const [formData, setFormData] = useState({
-    name: '',
-    brand: '',
-    store: '',
-    barcode: '',
-    servingSize: '',
-    calories: 0,
-    totalFat: 0,
-    saturatedFat: 0,
-    transFat: 0,
-    cholesterol: 0,
-    sodium: 0,
-    totalCarbs: 0,
-    dietaryFiber: 0,
-    totalSugars: 0,
-    addedSugars: 0,
-    protein: 0,
-    vitaminD: 0,
-    calcium: 0,
-    iron: 0,
-    potassium: 0
-  });
+  name: '',
+  brand: '',
+  store: '',
+  barcode: '',
+  servingSize: '',
+  calories: '',
+  totalFat: '',
+  saturatedFat: '',
+  transFat: '',
+  cholesterol: '',
+  sodium: '',
+  totalCarbs: '',
+  dietaryFiber: '',
+  totalSugars: '',
+  addedSugars: '',
+  protein: '',
+  vitaminD: '',
+  calcium: '',
+  iron: '',
+  potassium: ''
+});
   
   const [productPhoto, setProductPhoto] = useState(null);
   const [productPhotoPreview, setProductPhotoPreview] = useState(null);
@@ -44,13 +44,14 @@ const FoodForm = ({ initialBarcode, onComplete, onCancel, onScanBarcode }) => {
   }, [initialBarcode]);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    const isNumberField = !['name', 'brand', 'store', 'barcode', 'servingSize'].includes(name);
-    setFormData(prev => ({
-      ...prev,
-      [name]: isNumberField ? parseFloat(value) || 0 : value
-    }));
-  };
+  const { name, value } = e.target;
+  const isNumberField = !['name', 'brand', 'store', 'barcode', 'servingSize'].includes(name);
+  
+  setFormData(prev => ({
+    ...prev,
+    [name]: isNumberField ? (value === '' ? '' : parseFloat(value) || 0) : value
+  }));
+};
 
   const handleNutritionPhotoCapture = (photoBlob, nutritionData) => {
     setNutritionPhoto(photoBlob);
