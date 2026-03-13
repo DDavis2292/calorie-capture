@@ -7,6 +7,7 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
   const [photo, setPhoto] = useState(null);
   const [cameraReady, setCameraReady] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [ocrText, setOcrText] = useState('');
 
   useEffect(() => {
     startCamera();
@@ -18,8 +19,8 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { 
           facingMode: 'environment',
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
+          width: { ideal: 4032 },  // Max phone camera resolution
+          height: { ideal: 3024 }
         }
       });
       
@@ -57,36 +58,47 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
     canvas.toBlob((blob) => {
       const url = URL.createObjectURL(blob);
       setPhoto({ blob, url });
-    }, 'image/jpeg', 0.95);
+    }, 'image/jpeg', 1.0);  // Max quality
   };
 
   const confirmPhoto = async () => {
-    // If this is the PRODUCT photo, return immediately (no OCR)
+    // Product photo - no OCR
     if (captureType === 'product') {
       stopCamera();
       onCapture(photo.blob);
       return;
     }
     
-    // If this is the NUTRITION label, do OCR
+    // Nutrition label - do OCR
     if (captureType === 'nutrition') {
       setProcessing(true);
       
       try {
+        console.log("Starting OCR...");
+        
         const result = await Tesseract.recognize(photo.blob, 'eng', {
-          logger: m => console.log(m)
+          logger: m => {
+            if (m.status === 'recognizing text') {
+              console.log(`Progress: ${Math.round(m.progress * 100)}%`);
+            }
+          }
         });
         
         const text = result.data.text;
-        console.log("OCR Result:", text);
+        console.log("=== RAW OCR TEXT ===");
+        console.log(text);
+        console.log("===================");
+        
+        setOcrText(text); // Show user what OCR read
         
         const nutritionData = extractNutrition(text);
+        console.log("Extracted nutrition:", nutritionData);
         
         stopCamera();
         onCapture(photo.blob, nutritionData);
       } catch (err) {
         console.error("OCR Error:", err);
-        alert("OCR failed. You can enter values manually.");
+        alert("OCR failed. Check console for details.");
         stopCamera();
         onCapture(photo.blob, {});
       }
@@ -96,9 +108,13 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
   const retakePhoto = () => {
     URL.revokeObjectURL(photo.url);
     setPhoto(null);
+    setOcrText('');
   };
 
   const extractNutrition = (text) => {
+    // Clean up text - remove extra spaces and normalize
+    const cleanText = text.replace(/\s+/g, ' ').toLowerCase();
+    
     const data = {
       servingSize: '',
       calories: 0,
@@ -118,52 +134,79 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
       potassium: 0
     };
     
-    const servingMatch = text.match(/serving\s+size[:\s]+([^\n]+)/i);
+    // More flexible regex patterns
+    
+    // Serving size - try multiple patterns
+    let servingMatch = text.match(/serving\s*size[:\s]*([^\n]+)/i);
+    if (!servingMatch) servingMatch = text.match(/servings?\s*per\s*container[:\s]*([^\n]+)/i);
     if (servingMatch) data.servingSize = servingMatch[1].trim();
     
-    const calMatch = text.match(/calories[:\s]+(\d+)/i);
+    // Calories - try multiple patterns
+    let calMatch = text.match(/calories[:\s]*(\d+)/i);
+    if (!calMatch) calMatch = text.match(/(\d+)\s*calories/i);
     if (calMatch) data.calories = parseInt(calMatch[1]);
     
-    const totalFatMatch = text.match(/total\s+fat[:\s]+(\d+\.?\d*)\s*g/i);
-    if (totalFatMatch) data.totalFat = parseFloat(totalFatMatch[1]);
+    // Total Fat
+    let fatMatch = text.match(/total\s*fat[:\s]*(\d+\.?\d*)\s*g/i);
+    if (!fatMatch) fatMatch = text.match(/fat[:\s]*(\d+\.?\d*)\s*g/i);
+    if (fatMatch) data.totalFat = parseFloat(fatMatch[1]);
     
-    const satFatMatch = text.match(/saturated\s+fat[:\s]+(\d+\.?\d*)\s*g/i);
-    if (satFatMatch) data.saturatedFat = parseFloat(satFatMatch[1]);
+    // Saturated Fat
+    let satMatch = text.match(/saturated\s*fat[:\s]*(\d+\.?\d*)\s*g/i);
+    if (!satMatch) satMatch = text.match(/sat\.?\s*fat[:\s]*(\d+\.?\d*)\s*g/i);
+    if (satMatch) data.saturatedFat = parseFloat(satMatch[1]);
     
-    const transFatMatch = text.match(/trans\s+fat[:\s]+(\d+\.?\d*)\s*g/i);
-    if (transFatMatch) data.transFat = parseFloat(transFatMatch[1]);
+    // Trans Fat
+    let transMatch = text.match(/trans\s*fat[:\s]*(\d+\.?\d*)\s*g/i);
+    if (transMatch) data.transFat = parseFloat(transMatch[1]);
     
-    const cholMatch = text.match(/cholesterol[:\s]+(\d+\.?\d*)\s*mg/i);
+    // Cholesterol
+    let cholMatch = text.match(/cholesterol[:\s]*(\d+\.?\d*)\s*mg/i);
     if (cholMatch) data.cholesterol = parseFloat(cholMatch[1]);
     
-    const sodiumMatch = text.match(/sodium[:\s]+(\d+\.?\d*)\s*mg/i);
+    // Sodium
+    let sodiumMatch = text.match(/sodium[:\s]*(\d+\.?\d*)\s*mg/i);
     if (sodiumMatch) data.sodium = parseFloat(sodiumMatch[1]);
     
-    const carbMatch = text.match(/total\s+carbohydrate[:\s]+(\d+\.?\d*)\s*g/i);
+    // Total Carbohydrate
+    let carbMatch = text.match(/total\s*carbohydrate[:\s]*(\d+\.?\d*)\s*g/i);
+    if (!carbMatch) carbMatch = text.match(/carbohydrate[:\s]*(\d+\.?\d*)\s*g/i);
+    if (!carbMatch) carbMatch = text.match(/carbs[:\s]*(\d+\.?\d*)\s*g/i);
     if (carbMatch) data.totalCarbs = parseFloat(carbMatch[1]);
     
-    const fiberMatch = text.match(/dietary\s+fiber[:\s]+(\d+\.?\d*)\s*g/i);
+    // Dietary Fiber
+    let fiberMatch = text.match(/dietary\s*fiber[:\s]*(\d+\.?\d*)\s*g/i);
+    if (!fiberMatch) fiberMatch = text.match(/fiber[:\s]*(\d+\.?\d*)\s*g/i);
     if (fiberMatch) data.dietaryFiber = parseFloat(fiberMatch[1]);
     
-    const sugarMatch = text.match(/total\s+sugars[:\s]+(\d+\.?\d*)\s*g/i);
+    // Total Sugars
+    let sugarMatch = text.match(/total\s*sugars?[:\s]*(\d+\.?\d*)\s*g/i);
+    if (!sugarMatch) sugarMatch = text.match(/sugars?[:\s]*(\d+\.?\d*)\s*g/i);
     if (sugarMatch) data.totalSugars = parseFloat(sugarMatch[1]);
     
-    const addedSugarMatch = text.match(/added\s+sugars[:\s]+(\d+\.?\d*)\s*g/i);
-    if (addedSugarMatch) data.addedSugars = parseFloat(addedSugarMatch[1]);
+    // Added Sugars
+    let addedMatch = text.match(/added\s*sugars?[:\s]*(\d+\.?\d*)\s*g/i);
+    if (!addedMatch) addedMatch = text.match(/includes\s*(\d+\.?\d*)\s*g\s*added\s*sugar/i);
+    if (addedMatch) data.addedSugars = parseFloat(addedMatch[1]);
     
-    const proteinMatch = text.match(/protein[:\s]+(\d+\.?\d*)\s*g/i);
+    // Protein
+    let proteinMatch = text.match(/protein[:\s]*(\d+\.?\d*)\s*g/i);
     if (proteinMatch) data.protein = parseFloat(proteinMatch[1]);
     
-    const vitDMatch = text.match(/vitamin\s+d[:\s]+(\d+\.?\d*)\s*(mcg|μg)/i);
+    // Vitamin D
+    let vitDMatch = text.match(/vitamin\s*d[:\s]*(\d+\.?\d*)\s*(mcg|μg|ug)/i);
     if (vitDMatch) data.vitaminD = parseFloat(vitDMatch[1]);
     
-    const calciumMatch = text.match(/calcium[:\s]+(\d+\.?\d*)\s*mg/i);
+    // Calcium
+    let calciumMatch = text.match(/calcium[:\s]*(\d+\.?\d*)\s*mg/i);
     if (calciumMatch) data.calcium = parseFloat(calciumMatch[1]);
     
-    const ironMatch = text.match(/iron[:\s]+(\d+\.?\d*)\s*mg/i);
+    // Iron
+    let ironMatch = text.match(/iron[:\s]*(\d+\.?\d*)\s*mg/i);
     if (ironMatch) data.iron = parseFloat(ironMatch[1]);
     
-    const potassiumMatch = text.match(/potassium[:\s]+(\d+\.?\d*)\s*mg/i);
+    // Potassium
+    let potassiumMatch = text.match(/potassium[:\s]*(\d+\.?\d*)\s*mg/i);
     if (potassiumMatch) data.potassium = parseFloat(potassiumMatch[1]);
     
     return data;
@@ -187,7 +230,23 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
         {processing && (
           <div className="status-message status-loading">
             <div className="spinner"></div>
-            Reading nutrition label... This may take 20-30 seconds
+            Reading nutrition label... This may take 30-60 seconds. Check console for progress.
+          </div>
+        )}
+        
+        {ocrText && !processing && (
+          <div style={{ 
+            marginBottom: '16px', 
+            padding: '12px', 
+            background: 'var(--bg-secondary)', 
+            borderRadius: '8px',
+            fontSize: '0.75rem',
+            maxHeight: '150px',
+            overflow: 'auto',
+            color: 'var(--text-secondary)'
+          }}>
+            <strong>OCR Read:</strong><br/>
+            {ocrText}
           </div>
         )}
         
@@ -235,7 +294,7 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
           <div className="status-message status-loading">
             {captureType === 'product' 
               ? 'Center product in frame' 
-              : 'Position entire nutrition label in frame'}
+              : 'Get CLOSE to label and fill the frame completely'}
           </div>
           
           <button 

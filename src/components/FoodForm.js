@@ -27,6 +27,7 @@ const FoodForm = ({ initialBarcode, onComplete, onCancel, onScanBarcode }) => {
   });
   
   const [productPhoto, setProductPhoto] = useState(null);
+  const [productPhotoPreview, setProductPhotoPreview] = useState(null);
   const [nutritionPhoto, setNutritionPhoto] = useState(null);
   const [showNutritionCamera, setShowNutritionCamera] = useState(false);
   const [showProductCamera, setShowProductCamera] = useState(false);
@@ -83,17 +84,18 @@ const FoodForm = ({ initialBarcode, onComplete, onCancel, onScanBarcode }) => {
 
   const handleProductPhotoCapture = (photoBlob) => {
     setProductPhoto(photoBlob);
+    // Create preview URL
+    const previewUrl = URL.createObjectURL(photoBlob);
+    setProductPhotoPreview(previewUrl);
     setShowProductCamera(false);
   };
 
   const openNutritionCamera = () => {
-    // Close any other cameras first
     setShowProductCamera(false);
     setShowNutritionCamera(true);
   };
 
   const openProductCamera = () => {
-    // Close any other cameras first
     setShowNutritionCamera(false);
     setShowProductCamera(true);
   };
@@ -169,6 +171,11 @@ const FoodForm = ({ initialBarcode, onComplete, onCancel, onScanBarcode }) => {
         ]);
 
       if (error) throw error;
+
+      // Clean up preview URL
+      if (productPhotoPreview) {
+        URL.revokeObjectURL(productPhotoPreview);
+      }
 
       alert('✅ Food saved successfully!');
       onComplete();
@@ -280,7 +287,7 @@ const FoodForm = ({ initialBarcode, onComplete, onCancel, onScanBarcode }) => {
           />
         </div>
 
-        {/* Nutrition Label Scanner */}
+        {/* Nutrition Label Photo */}
         <h4 className="section-header">Nutrition Facts</h4>
         
         <button 
@@ -293,7 +300,7 @@ const FoodForm = ({ initialBarcode, onComplete, onCancel, onScanBarcode }) => {
         
         {nutritionPhoto && (
           <div className="status-message status-success">
-            ✓ Nutrition label photo captured
+            ✓ Nutrition label captured - values auto-filled below
           </div>
         )}
 
@@ -491,9 +498,21 @@ const FoodForm = ({ initialBarcode, onComplete, onCancel, onScanBarcode }) => {
           📷 {productPhoto ? 'Retake Product Photo' : 'Add Product Photo'}
         </button>
         
-        {productPhoto && (
-          <div className="status-message status-success">
-            ✓ Product photo captured
+        {/* PRODUCT PHOTO DISPLAYED HERE */}
+        {productPhotoPreview && (
+          <div style={{ marginTop: '16px', marginBottom: '16px' }}>
+            <img 
+              src={productPhotoPreview} 
+              alt="Product" 
+              style={{ 
+                width: '100%', 
+                maxHeight: '400px', 
+                objectFit: 'contain', 
+                borderRadius: '12px',
+                background: '#000',
+                boxShadow: '4px 4px 8px var(--shadow-dark), -4px -4px 8px var(--shadow-light)'
+              }}
+            />
           </div>
         )}
 
