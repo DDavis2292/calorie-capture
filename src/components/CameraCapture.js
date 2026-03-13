@@ -10,9 +10,21 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
   const [ocrText, setOcrText] = useState('');
 
   useEffect(() => {
-    startCamera();
-    return () => stopCamera();
-  }, []);
+  let mounted = true;
+    
+  const initCamera = async () => {
+    if (mounted) {
+      await startCamera();
+    }
+  };
+  
+  initCamera();
+  
+  return () => {
+    mounted = false;
+    stopCamera();
+  };
+}, []);
 
   const startCamera = async () => {
     try {
@@ -62,48 +74,48 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
   };
 
   const confirmPhoto = async () => {
-    // Product photo - no OCR
-    if (captureType === 'product') {
-      stopCamera();
-      onCapture(photo.blob);
-      return;
-    }
+  // STOP CAMERA FIRST - before any async operations
+  stopCamera();
+  
+  // Product photo - no OCR
+  if (captureType === 'product') {
+    onCapture(photo.blob);
+    return;
+  }
+  
+  // Nutrition label - do OCR
+  if (captureType === 'nutrition') {
+    setProcessing(true);
     
-    // Nutrition label - do OCR
-    if (captureType === 'nutrition') {
-      setProcessing(true);
+    try {
+      console.log("Starting OCR...");
       
-      try {
-        console.log("Starting OCR...");
-        
-        const result = await Tesseract.recognize(photo.blob, 'eng', {
-          logger: m => {
-            if (m.status === 'recognizing text') {
-              console.log(`Progress: ${Math.round(m.progress * 100)}%`);
-            }
+      const result = await Tesseract.recognize(photo.blob, 'eng', {
+        logger: m => {
+          if (m.status === 'recognizing text') {
+            console.log(`Progress: ${Math.round(m.progress * 100)}%`);
           }
-        });
-        
-        const text = result.data.text;
-        console.log("=== RAW OCR TEXT ===");
-        console.log(text);
-        console.log("===================");
-        
-        setOcrText(text); // Show user what OCR read
-        
-        const nutritionData = extractNutrition(text);
-        console.log("Extracted nutrition:", nutritionData);
-        
-        stopCamera();
-        onCapture(photo.blob, nutritionData);
-      } catch (err) {
-        console.error("OCR Error:", err);
-        alert("OCR failed. Check console for details.");
-        stopCamera();
-        onCapture(photo.blob, {});
-      }
+        }
+      });
+      
+      const text = result.data.text;
+      console.log("=== RAW OCR TEXT ===");
+      console.log(text);
+      console.log("===================");
+      
+      setOcrText(text);
+      
+      const nutritionData = extractNutrition(text);
+      console.log("Extracted nutrition:", nutritionData);
+      
+      onCapture(photo.blob, nutritionData);
+    } catch (err) {
+      console.error("OCR Error:", err);
+      alert("OCR failed. Check console for details.");
+      onCapture(photo.blob, {});
     }
-  };
+  }
+};
 
   const retakePhoto = () => {
     URL.revokeObjectURL(photo.url);
