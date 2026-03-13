@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import CameraCapture from './CameraCapture';
 
@@ -7,7 +7,7 @@ const FoodForm = ({ initialBarcode, onComplete, onCancel, onScanBarcode }) => {
     name: '',
     brand: '',
     store: '',
-    barcode: initialBarcode || '',
+    barcode: '',
     servingSize: '',
     calories: 0,
     totalFat: 0,
@@ -32,6 +32,16 @@ const FoodForm = ({ initialBarcode, onComplete, onCancel, onScanBarcode }) => {
   const [showProductCamera, setShowProductCamera] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // Update barcode when it comes from scanner
+  useEffect(() => {
+    if (initialBarcode) {
+      setFormData(prev => ({
+        ...prev,
+        barcode: initialBarcode
+      }));
+    }
+  }, [initialBarcode]);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     const isNumberField = !['name', 'brand', 'store', 'barcode', 'servingSize'].includes(name);
@@ -45,8 +55,10 @@ const FoodForm = ({ initialBarcode, onComplete, onCancel, onScanBarcode }) => {
     setNutritionPhoto(photoBlob);
     setShowNutritionCamera(false);
     
+    console.log("Nutrition data received:", nutritionData);
+    
     // Auto-fill nutrition data from OCR
-    if (nutritionData) {
+    if (nutritionData && Object.keys(nutritionData).length > 0) {
       setFormData(prev => ({
         ...prev,
         servingSize: nutritionData.servingSize || prev.servingSize,
@@ -72,6 +84,18 @@ const FoodForm = ({ initialBarcode, onComplete, onCancel, onScanBarcode }) => {
   const handleProductPhotoCapture = (photoBlob) => {
     setProductPhoto(photoBlob);
     setShowProductCamera(false);
+  };
+
+  const openNutritionCamera = () => {
+    // Close any other cameras first
+    setShowProductCamera(false);
+    setShowNutritionCamera(true);
+  };
+
+  const openProductCamera = () => {
+    // Close any other cameras first
+    setShowNutritionCamera(false);
+    setShowProductCamera(true);
   };
 
   const handleSubmit = async (e) => {
@@ -156,6 +180,7 @@ const FoodForm = ({ initialBarcode, onComplete, onCancel, onScanBarcode }) => {
     }
   };
 
+  // If any camera is open, show only that camera
   if (showNutritionCamera) {
     return (
       <CameraCapture
@@ -261,7 +286,7 @@ const FoodForm = ({ initialBarcode, onComplete, onCancel, onScanBarcode }) => {
         <button 
           type="button"
           className="btn btn-primary btn-full"
-          onClick={() => setShowNutritionCamera(true)}
+          onClick={openNutritionCamera}
         >
           📷 {nutritionPhoto ? 'Retake Nutrition Label' : 'Scan Nutrition Label'}
         </button>
@@ -461,7 +486,7 @@ const FoodForm = ({ initialBarcode, onComplete, onCancel, onScanBarcode }) => {
         <button 
           type="button"
           className="btn btn-primary btn-full"
-          onClick={() => setShowProductCamera(true)}
+          onClick={openProductCamera}
         >
           📷 {productPhoto ? 'Retake Product Photo' : 'Add Product Photo'}
         </button>
