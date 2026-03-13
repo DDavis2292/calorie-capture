@@ -21,23 +21,33 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
   }, []);
 
   const startCamera = async () => {
-    try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { 
-          facingMode: 'environment',
-          width: { ideal: 4032 },  // Take advantage of phone camera quality
-          height: { ideal: 3024 }
-        }
-      });
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-        setStream(mediaStream);
-      }
-    } catch (err) {
-      console.error("Camera access error:", err);
-      alert("Cannot access camera. Please check permissions.");
+  try {
+    // Stop any existing streams first
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
     }
-  };
+    
+    const mediaStream = await navigator.mediaDevices.getUserMedia({
+      video: { 
+        facingMode: 'environment',
+        width: { ideal: 1920 },
+        height: { ideal: 1080 }
+      }
+    });
+    
+    if (videoRef.current) {
+      videoRef.current.srcObject = mediaStream;
+      // Wait for video to be ready
+      videoRef.current.onloadedmetadata = () => {
+        videoRef.current.play();
+      };
+      setStream(mediaStream);
+    }
+  } catch (err) {
+    console.error("Camera access error:", err);
+    alert("Cannot access camera. Please check permissions.");
+  }
+};
 
   const stopCamera = () => {
     if (stream) {
