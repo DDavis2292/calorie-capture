@@ -3,211 +3,100 @@ import Tesseract from 'tesseract.js';
 
 const CameraCapture = ({ onCapture, onClose, captureType }) => {
   const videoRef = useRef(null);
-  const canvasRef = useRef(null);
   const [stream, setStream] = useState(null);
-  const [capturing, setCapturing] = useState(false);
-  const [processing, setProcessing] = useState(false);
+  const [photo, setPhoto] = useState(null);
   const [cameraReady, setCameraReady] = useState(false);
+  const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
-    let mounted = true;
-    
-    const initCamera = async () => {
-      try {
-        const mediaStream = await navigator.mediaDevices.getUserMedia({
-  video: { 
-    facingMode: 'environment',
-    width: { ideal: 4032 },   // Higher resolution
-    height: { ideal: 3024 },
-    zoom: true                 // Enable zoom if supported
-  }
-});
-        
-        if (!mounted) {
-          mediaStream.getTracks().forEach(track => track.stop());
-          return;
-        }
-        
-        if (videoRef.current) {
-          videoRef.current.srcObject = mediaStream;
-          videoRef.current.onloadedmetadata = () => {
-            if (videoRef.current) {
-              videoRef.current.play().then(() => {
-                setCameraReady(true);
-              }).catch(err => {
-                console.error("Video play error:", err);
-              });
-            }
-          };
-          setStream(mediaStream);
-        }
-      } catch (err) {
-        console.error("Camera access error:", err);
-        alert("Cannot access camera. Please check permissions.");
-      }
-    };
-    
-    // Small delay to ensure cleanup from previous component
-    const timer = setTimeout(() => {
-      initCamera();
-    }, 100);
-    
-    return () => {
-      mounted = false;
-      clearTimeout(timer);
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-      }
-    };
+    startCamera();
+    return () => stopCamera();
   }, []);
+
+  const startCamera = async () => {
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { 
+          facingMode: 'environment',
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        }
+      });
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current.play();
+          setCameraReady(true);
+        };
+        setStream(mediaStream);
+      }
+    } catch (err) {
+      console.error("Camera error:", err);
+      alert("Cannot access camera. Please check permissions.");
+    }
+  };
 
   const stopCamera = () => {
     if (stream) {
       stream.getTracks().forEach(track => track.stop());
       setStream(null);
     }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
   };
 
-  const detectAndRotateImage = async (canvas) => {
-    // Get device orientation
-    const orientation = window.screen.orientation?.angle || 0;
+  const takePhoto = () => {
+    if (!videoRef.current) return;
     
-    // Create a new canvas for rotation
-    const rotatedCanvas = document.createElement('canvas');
-    const ctx = rotatedCanvas.getContext('2d');
+    const canvas = document.createElement('canvas');
+    const video = videoRef.current;
     
-    // Determine rotation based on device orientation
-    let rotationAngle = 0;
-    if (orientation === 90) rotationAngle = -90;
-    if (orientation === 270) rotationAngle = 90;
-    if (orientation === 180) rotationAngle = 180;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
     
-    if (rotationAngle === 0) {
-      return canvas; // No rotation needed
-    }
-    
-    // Set canvas size based on rotation
-    if (Math.abs(rotationAngle) === 90) {
-      rotatedCanvas.width = canvas.height;
-      rotatedCanvas.height = canvas.width;
-    } else {
-      rotatedCanvas.width = canvas.width;
-      rotatedCanvas.height = canvas.height;
-    }
-    
-    // Apply rotation
-    ctx.translate(rotatedCanvas.width / 2, rotatedCanvas.height / 2);
-    ctx.rotate((rotationAngle * Math.PI) / 180);
-    ctx.drawImage(canvas, -canvas.width / 2, -canvas.height / 2);
-    
-    return rotatedCanvas;
+    canvas.toBlob((blob) => {
+      const url = URL.createObjectURL(blob);
+      setPhoto({ blob, url });
+    }, 'image/jpeg', 0.95);
   };
 
-  const preprocessImage = (canvas) => {
-    const ctx = canvas.getContext('2d');
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data;
-    
-    // Convert to grayscale and increase contrast
-    for (let i = 0; i < data.length; i += 4) {
-      const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
-      const contrast = 1.5;
-      const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
-      const value = Math.max(0, Math.min(255, factor * (avg - 128) + 128));
-      
-      data[i] = value;
-      data[i + 1] = value;
-      data[i + 2] = value;
-    }
-    
-    ctx.putImageData(imageData, 0, 0);
-    return canvas;
-  };
-
-  const capturePhoto = async (skipOCR = false) => {
-  if (!cameraReady) {
-    alert("Camera is not ready. Please wait.");
-    return;
-  }
-  
-  setCapturing(true);
-  
-  const canvas = canvasRef.current;
-  const video = videoRef.current;
-  
-  if (!video || !canvas || !video.videoWidth) {
-    alert("Camera not ready. Please try again.");
-    setCapturing(false);
-    return;
-  }
-  
-  const context = canvas.getContext('2d');
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  context.drawImage(video, 0, 0);
-  
-  // Only rotate for nutrition labels (product photos don't need it)
-  let finalCanvas = canvas;
-  if (captureType === 'nutrition') {
-    finalCanvas = await detectAndRotateImage(canvas);
-  }
-  
-  // Create original photo blob
-  const originalBlob = await new Promise(resolve => {
-    finalCanvas.toBlob(blob => resolve(blob), 'image/jpeg', 0.95);
-  });
-  
-  if (!originalBlob) {
-    alert("Failed to capture photo. Please try again.");
-    setCapturing(false);
-    return;
-  }
-  
-  // For nutrition labels, do OCR (unless skipped)
-  if (captureType === 'nutrition' && !skipOCR) {
-    setProcessing(true);
-    
-    try {
-      const processedCanvas = document.createElement('canvas');
-      processedCanvas.width = finalCanvas.width;
-      processedCanvas.height = finalCanvas.height;
-      const processedCtx = processedCanvas.getContext('2d');
-      processedCtx.drawImage(finalCanvas, 0, 0);
-      preprocessImage(processedCanvas);
-      
-      const processedBlob = await new Promise(resolve => {
-        processedCanvas.toBlob(blob => resolve(blob), 'image/jpeg', 1.0);
-      });
-      
-      const result = await Tesseract.recognize(processedBlob, 'eng', {
-        logger: m => console.log(m)
-      });
-      
-      const text = result.data.text;
-      console.log("OCR Result:", text);
-      
-      const nutritionData = extractNutrition(text);
-      
-      onCapture(originalBlob, nutritionData);
+  const confirmPhoto = async () => {
+    // If this is the PRODUCT photo, return immediately (no OCR)
+    if (captureType === 'product') {
       stopCamera();
-    } catch (err) {
-      console.error("OCR Error:", err);
-      alert("Failed to read label. You can enter values manually.");
-      onCapture(originalBlob, {});
-      stopCamera();
+      onCapture(photo.blob);
+      return;
     }
-  } else {
-    // For product photo or skipped OCR, just return the image immediately
-    onCapture(originalBlob, captureType === 'nutrition' ? {} : null);
-    stopCamera();
-  }
-};
+    
+    // If this is the NUTRITION label, do OCR
+    if (captureType === 'nutrition') {
+      setProcessing(true);
+      
+      try {
+        const result = await Tesseract.recognize(photo.blob, 'eng', {
+          logger: m => console.log(m)
+        });
+        
+        const text = result.data.text;
+        console.log("OCR Result:", text);
+        
+        const nutritionData = extractNutrition(text);
+        
+        stopCamera();
+        onCapture(photo.blob, nutritionData);
+      } catch (err) {
+        console.error("OCR Error:", err);
+        alert("OCR failed. You can enter values manually.");
+        stopCamera();
+        onCapture(photo.blob, {});
+      }
+    }
+  };
+
+  const retakePhoto = () => {
+    URL.revokeObjectURL(photo.url);
+    setPhoto(null);
+  };
 
   const extractNutrition = (text) => {
     const data = {
@@ -280,9 +169,46 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
     return data;
   };
 
+  if (photo) {
+    return (
+      <div className="card">
+        <h3 style={{ marginBottom: '16px', color: 'var(--accent-blue)' }}>
+          Review Photo
+        </h3>
+        
+        <div className="camera-viewport-large">
+          <img 
+            src={photo.url} 
+            alt="Captured" 
+            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+          />
+        </div>
+        
+        {processing && (
+          <div className="status-message status-loading">
+            <div className="spinner"></div>
+            Reading nutrition label... This may take 20-30 seconds
+          </div>
+        )}
+        
+        {!processing && (
+          <>
+            <button className="btn btn-primary btn-full" onClick={confirmPhoto}>
+              {captureType === 'nutrition' ? '✓ Use Photo & Read Label' : '✓ Use This Photo'}
+            </button>
+            
+            <button className="btn btn-secondary btn-full" onClick={retakePhoto}>
+              ↻ Retake Photo
+            </button>
+          </>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="card">
-      <h3 style={{ marginBottom: '16px', color: 'var(--accent-pink)' }}>
+      <h3 style={{ marginBottom: '16px', color: 'var(--accent-blue)' }}>
         {captureType === 'product' ? 'Capture Product Photo' : 'Capture Nutrition Label'}
       </h3>
       
@@ -297,58 +223,33 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
         <div className="camera-overlay-vertical"></div>
       </div>
       
-      <div className="camera-viewport-large">
-  <video 
-    ref={videoRef} 
-    autoPlay 
-    playsInline 
-    muted
-    style={{ 
-      width: '100%', 
-      height: '100%', 
-      objectFit: 'cover',
-      transform: 'scale(1.2)'  // Zoom in 20% by default
-    }} 
-  />
-  <div className="camera-overlay-vertical"></div>
-</div>
-
-      <canvas ref={canvasRef} style={{ display: 'none' }} />
+      {!cameraReady && (
+        <div className="status-message status-loading">
+          <div className="spinner"></div>
+          Starting camera...
+        </div>
+      )}
       
-      {cameraReady && !processing && (
-  <>
-    <div className="status-message status-loading">
-      {captureType === 'product' 
-        ? 'Center product in frame (horizontal or vertical)' 
-        : 'Position entire nutrition label in frame'}
-    </div>
-    
-    <button 
-      className="btn btn-primary btn-full" 
-      onClick={() => capturePhoto(false)}
-      disabled={capturing || !cameraReady}
-    >
-      {capturing ? 'CAPTURING...' : '📷 CAPTURE & READ LABEL'}
-    </button>
-    
-    {captureType === 'nutrition' && (
-      <button 
-        className="btn btn-secondary btn-full" 
-        onClick={() => capturePhoto(true)}
-        disabled={capturing || !cameraReady}
-      >
-        📷 CAPTURE ONLY (Enter Manually)
-      </button>
-    )}
-    
-    <button className="btn btn-secondary btn-full" onClick={() => {
-      stopCamera();
-      onClose();
-    }}>
-      CANCEL
-    </button>
-  </>
-)}
+      {cameraReady && (
+        <>
+          <div className="status-message status-loading">
+            {captureType === 'product' 
+              ? 'Center product in frame' 
+              : 'Position entire nutrition label in frame'}
+          </div>
+          
+          <button 
+            className="btn btn-primary btn-full" 
+            onClick={takePhoto}
+          >
+            📷 TAKE PHOTO
+          </button>
+          
+          <button className="btn btn-secondary btn-full" onClick={onClose}>
+            CANCEL
+          </button>
+        </>
+      )}
     </div>
   );
 };

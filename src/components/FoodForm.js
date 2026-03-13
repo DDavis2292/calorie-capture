@@ -1,30 +1,35 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabaseClient';
+import CameraCapture from './CameraCapture';
 
-const FoodForm = ({ barcode, productPhoto, nutritionPhoto, nutritionData, onComplete }) => {
+const FoodForm = ({ initialBarcode, onComplete, onCancel, onScanBarcode }) => {
   const [formData, setFormData] = useState({
     name: '',
     brand: '',
     store: '',
-    barcode: barcode || '',
-    servingSize: nutritionData?.servingSize || '',
-    calories: nutritionData?.calories || 0,
-    totalFat: nutritionData?.totalFat || 0,
-    saturatedFat: nutritionData?.saturatedFat || 0,
-    transFat: nutritionData?.transFat || 0,
-    cholesterol: nutritionData?.cholesterol || 0,
-    sodium: nutritionData?.sodium || 0,
-    totalCarbs: nutritionData?.totalCarbs || 0,
-    dietaryFiber: nutritionData?.dietaryFiber || 0,
-    totalSugars: nutritionData?.totalSugars || 0,
-    addedSugars: nutritionData?.addedSugars || 0,
-    protein: nutritionData?.protein || 0,
-    vitaminD: nutritionData?.vitaminD || 0,
-    calcium: nutritionData?.calcium || 0,
-    iron: nutritionData?.iron || 0,
-    potassium: nutritionData?.potassium || 0
+    barcode: initialBarcode || '',
+    servingSize: '',
+    calories: 0,
+    totalFat: 0,
+    saturatedFat: 0,
+    transFat: 0,
+    cholesterol: 0,
+    sodium: 0,
+    totalCarbs: 0,
+    dietaryFiber: 0,
+    totalSugars: 0,
+    addedSugars: 0,
+    protein: 0,
+    vitaminD: 0,
+    calcium: 0,
+    iron: 0,
+    potassium: 0
   });
   
+  const [productPhoto, setProductPhoto] = useState(null);
+  const [nutritionPhoto, setNutritionPhoto] = useState(null);
+  const [showNutritionCamera, setShowNutritionCamera] = useState(false);
+  const [showProductCamera, setShowProductCamera] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const handleChange = (e) => {
@@ -34,6 +39,39 @@ const FoodForm = ({ barcode, productPhoto, nutritionPhoto, nutritionData, onComp
       ...prev,
       [name]: isNumberField ? parseFloat(value) || 0 : value
     }));
+  };
+
+  const handleNutritionPhotoCapture = (photoBlob, nutritionData) => {
+    setNutritionPhoto(photoBlob);
+    setShowNutritionCamera(false);
+    
+    // Auto-fill nutrition data from OCR
+    if (nutritionData) {
+      setFormData(prev => ({
+        ...prev,
+        servingSize: nutritionData.servingSize || prev.servingSize,
+        calories: nutritionData.calories || prev.calories,
+        totalFat: nutritionData.totalFat || prev.totalFat,
+        saturatedFat: nutritionData.saturatedFat || prev.saturatedFat,
+        transFat: nutritionData.transFat || prev.transFat,
+        cholesterol: nutritionData.cholesterol || prev.cholesterol,
+        sodium: nutritionData.sodium || prev.sodium,
+        totalCarbs: nutritionData.totalCarbs || prev.totalCarbs,
+        dietaryFiber: nutritionData.dietaryFiber || prev.dietaryFiber,
+        totalSugars: nutritionData.totalSugars || prev.totalSugars,
+        addedSugars: nutritionData.addedSugars || prev.addedSugars,
+        protein: nutritionData.protein || prev.protein,
+        vitaminD: nutritionData.vitaminD || prev.vitaminD,
+        calcium: nutritionData.calcium || prev.calcium,
+        iron: nutritionData.iron || prev.iron,
+        potassium: nutritionData.potassium || prev.potassium
+      }));
+    }
+  };
+
+  const handleProductPhotoCapture = (photoBlob) => {
+    setProductPhoto(photoBlob);
+    setShowProductCamera(false);
   };
 
   const handleSubmit = async (e) => {
@@ -118,9 +156,29 @@ const FoodForm = ({ barcode, productPhoto, nutritionPhoto, nutritionData, onComp
     }
   };
 
+  if (showNutritionCamera) {
+    return (
+      <CameraCapture
+        captureType="nutrition"
+        onCapture={handleNutritionPhotoCapture}
+        onClose={() => setShowNutritionCamera(false)}
+      />
+    );
+  }
+
+  if (showProductCamera) {
+    return (
+      <CameraCapture
+        captureType="product"
+        onCapture={handleProductPhotoCapture}
+        onClose={() => setShowProductCamera(false)}
+      />
+    );
+  }
+
   return (
     <div className="card">
-      <h3 style={{ marginBottom: '20px', color: 'var(--accent-pink)' }}>
+      <h3 style={{ marginBottom: '20px', color: 'var(--accent-blue)' }}>
         Add Food Details
       </h3>
 
@@ -166,14 +224,23 @@ const FoodForm = ({ barcode, productPhoto, nutritionPhoto, nutritionData, onComp
 
         <div className="input-group">
           <label className="input-label">Barcode</label>
-          <input
-            type="text"
-            name="barcode"
-            className="input"
-            value={formData.barcode}
-            onChange={handleChange}
-            placeholder="UPC/EAN code"
-          />
+          <div className="input-wrapper">
+            <input
+              type="text"
+              name="barcode"
+              className="input"
+              value={formData.barcode}
+              onChange={handleChange}
+              placeholder="UPC/EAN code"
+            />
+            <button 
+              type="button"
+              className="btn btn-icon btn-secondary"
+              onClick={onScanBarcode}
+            >
+              📷
+            </button>
+          </div>
         </div>
 
         <div className="input-group">
@@ -188,11 +255,24 @@ const FoodForm = ({ barcode, productPhoto, nutritionPhoto, nutritionData, onComp
           />
         </div>
 
-        {/* Nutrition Facts */}
-        <h4 style={{ color: 'var(--accent-pink)', marginTop: '24px', marginBottom: '16px' }}>
-          Nutrition Facts
-        </h4>
+        {/* Nutrition Label Scanner */}
+        <h4 className="section-header">Nutrition Facts</h4>
+        
+        <button 
+          type="button"
+          className="btn btn-primary btn-full"
+          onClick={() => setShowNutritionCamera(true)}
+        >
+          📷 {nutritionPhoto ? 'Retake Nutrition Label' : 'Scan Nutrition Label'}
+        </button>
+        
+        {nutritionPhoto && (
+          <div className="status-message status-success">
+            ✓ Nutrition label photo captured
+          </div>
+        )}
 
+        {/* Nutrition Fields */}
         <div className="input-group">
           <label className="input-label">Calories</label>
           <input
@@ -375,13 +455,39 @@ const FoodForm = ({ barcode, productPhoto, nutritionPhoto, nutritionData, onComp
           </div>
         </div>
 
+        {/* Product Photo */}
+        <h4 className="section-header">Product Photo</h4>
+        
+        <button 
+          type="button"
+          className="btn btn-primary btn-full"
+          onClick={() => setShowProductCamera(true)}
+        >
+          📷 {productPhoto ? 'Retake Product Photo' : 'Add Product Photo'}
+        </button>
+        
+        {productPhoto && (
+          <div className="status-message status-success">
+            ✓ Product photo captured
+          </div>
+        )}
+
+        {/* Action Buttons */}
         <button 
           type="submit" 
           className="btn btn-primary btn-full"
           disabled={saving}
-          style={{ marginTop: '24px' }}
+          style={{ marginTop: '32px' }}
         >
           {saving ? 'Saving...' : '💾 Save Food'}
+        </button>
+
+        <button 
+          type="button"
+          className="btn btn-secondary btn-full"
+          onClick={onCancel}
+        >
+          ← Back to Home
         </button>
       </form>
     </div>

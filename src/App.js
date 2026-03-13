@@ -1,59 +1,35 @@
 import React, { useState } from 'react';
 import './App.css';
 import BarcodeScanner from './components/BarcodeScanner';
-import CameraCapture from './components/CameraCapture';
 import FoodForm from './components/FoodForm';
 import FoodList from './components/FoodList';
 
 function App() {
   const [activeTab, setActiveTab] = useState('scan');
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
-  const [showProductCamera, setShowProductCamera] = useState(false);
-  const [showNutritionCamera, setShowNutritionCamera] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  
-  const [scannedBarcode, setScannedBarcode] = useState(null);
-  const [productPhoto, setProductPhoto] = useState(null);
-  const [nutritionPhoto, setNutritionPhoto] = useState(null);
-  const [nutritionData, setNutritionData] = useState(null);
+  const [scannedBarcode, setScannedBarcode] = useState('');
 
   const handleBarcodeScanned = (barcode) => {
     setScannedBarcode(barcode);
     setShowBarcodeScanner(false);
-    setShowProductCamera(true);
+    setShowForm(true);
   };
 
-  const handleProductPhotoCapture = (photoBlob) => {
-    setProductPhoto(photoBlob);
-    setShowProductCamera(false);
-    setShowNutritionCamera(true);
-  };
-
-  const handleNutritionPhotoCapture = (photoBlob, nutrition) => {
-    setNutritionPhoto(photoBlob);
-    setNutritionData(nutrition);
-    setShowNutritionCamera(false);
+  const startNewEntry = () => {
+    setScannedBarcode('');
     setShowForm(true);
   };
 
   const handleFormComplete = () => {
-    setScannedBarcode(null);
-    setProductPhoto(null);
-    setNutritionPhoto(null);
-    setNutritionData(null);
+    setScannedBarcode('');
     setShowForm(false);
     setActiveTab('database');
   };
 
-  const startNewScan = () => {
-    setScannedBarcode(null);
-    setProductPhoto(null);
-    setNutritionPhoto(null);
-    setNutritionData(null);
+  const handleFormCancel = () => {
+    setScannedBarcode('');
     setShowForm(false);
-    setShowProductCamera(false);
-    setShowNutritionCamera(false);
-    setShowBarcodeScanner(true);
   };
 
   return (
@@ -66,78 +42,57 @@ function App() {
       <div className="nav-tabs">
         <button 
           className={`nav-tab ${activeTab === 'scan' ? 'active' : ''}`}
-          onClick={() => setActiveTab('scan')}
+          onClick={() => {
+            setActiveTab('scan');
+            setShowForm(false);
+            setShowBarcodeScanner(false);
+          }}
         >
           📷 Scan
         </button>
         <button 
           className={`nav-tab ${activeTab === 'database' ? 'active' : ''}`}
-          onClick={() => setActiveTab('database')}
+          onClick={() => {
+            setActiveTab('database');
+            setShowForm(false);
+            setShowBarcodeScanner(false);
+          }}
         >
           📊 Database
         </button>
       </div>
 
-      {activeTab === 'scan' && (
-        <div>
-          {!showBarcodeScanner && !showProductCamera && !showNutritionCamera && !showForm && (
-            <div className="card">
-              <h3 style={{ marginBottom: '20px', color: 'var(--accent-pink)' }}>
-                Start New Entry
-              </h3>
-              <button 
-                className="btn btn-primary btn-full"
-                onClick={startNewScan}
-              >
-                📷 Scan Barcode & Capture Photos
-              </button>
-              <p style={{ textAlign: 'center', color: 'var(--text-secondary)', marginTop: '16px', fontSize: '0.9rem' }}>
-                1. Scan barcode<br/>
-                2. Photo of product front<br/>
-                3. Photo of nutrition label
-              </p>
-            </div>
-          )}
-
-          {showBarcodeScanner && (
-            <BarcodeScanner
-              onScan={handleBarcodeScanned}
-              onClose={() => setShowBarcodeScanner(false)}
-            />
-          )}
-
-          {showProductCamera && (
-            <CameraCapture
-              captureType="product"
-              onCapture={handleProductPhotoCapture}
-              onClose={() => {
-                setShowProductCamera(false);
-                setScannedBarcode(null);
-              }}
-            />
-          )}
-
-          {showNutritionCamera && (
-            <CameraCapture
-              captureType="nutrition"
-              onCapture={handleNutritionPhotoCapture}
-              onClose={() => {
-                setShowNutritionCamera(false);
-                setProductPhoto(null);
-              }}
-            />
-          )}
-
-          {showForm && (
-            <FoodForm
-              barcode={scannedBarcode}
-              productPhoto={productPhoto}
-              nutritionPhoto={nutritionPhoto}
-              nutritionData={nutritionData}
-              onComplete={handleFormComplete}
-            />
-          )}
+      {activeTab === 'scan' && !showForm && !showBarcodeScanner && (
+        <div className="card">
+          <h3 style={{ marginBottom: '20px', color: 'var(--accent-blue)' }}>
+            Add New Product
+          </h3>
+          <button 
+            className="btn btn-primary btn-full"
+            onClick={startNewEntry}
+          >
+            ➕ New Entry
+          </button>
+          <p style={{ textAlign: 'center', color: 'var(--text-secondary)', marginTop: '16px', fontSize: '0.9rem' }}>
+            Create a new food database entry with photos and nutrition info
+          </p>
         </div>
+      )}
+
+      {showBarcodeScanner && (
+        <BarcodeScanner
+          onScan={handleBarcodeScanned}
+          onClose={() => setShowBarcodeScanner(false)}
+        />
+      )}
+
+      {showForm && (
+        <FoodForm
+          initialBarcode={scannedBarcode}
+          onComplete={handleFormComplete}
+          onCancel={handleFormCancel}
+          onScanBarcode={() => setShowBarcodeScanner(true)}
+        />
       )}
 
       {activeTab === 'database' && <FoodList />}
