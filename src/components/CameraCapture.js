@@ -8,6 +8,7 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
   const [cameraReady, setCameraReady] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [ocrText, setOcrText] = useState('');
+  const [rotation, setRotation] = useState(0); // 0, 90, 180, 270
 
   useEffect(() => {
     let mounted = true;
@@ -57,15 +58,29 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
     }
   };
 
+  const rotateCamera = () => {
+    setRotation((prev) => (prev + 90) % 360);
+  };
+
   const takePhoto = () => {
     if (!videoRef.current) return;
     
     const canvas = document.createElement('canvas');
     const video = videoRef.current;
     
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext('2d').drawImage(video, 0, 0);
+    // Apply rotation to canvas
+    if (rotation === 90 || rotation === 270) {
+      canvas.width = video.videoHeight;
+      canvas.height = video.videoWidth;
+    } else {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+    }
+    
+    const ctx = canvas.getContext('2d');
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate((rotation * Math.PI) / 180);
+    ctx.drawImage(video, -video.videoWidth / 2, -video.videoHeight / 2);
     
     canvas.toBlob((blob) => {
       const url = URL.createObjectURL(blob);
@@ -266,7 +281,7 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
         {processing && (
           <div className="status-message status-loading">
             <div className="spinner"></div>
-            Reading nutrition label... This may take 30-60 seconds. Check console for progress.
+            Reading nutrition label... This may take 30-60 seconds.
           </div>
         )}
         
@@ -313,7 +328,12 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
           autoPlay 
           playsInline 
           muted
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+          style={{ 
+            width: '100%', 
+            height: '100%', 
+            objectFit: 'cover',
+            transform: `rotate(${rotation}deg)`
+          }} 
         />
         <div className="camera-overlay-vertical"></div>
       </div>
@@ -332,6 +352,14 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
               ? 'Center product in frame' 
               : 'Get CLOSE to label - fill the entire frame'}
           </div>
+          
+          <button 
+            className="btn btn-secondary btn-icon btn-full" 
+            onClick={rotateCamera}
+            style={{ marginBottom: '12px' }}
+          >
+            🔄 Rotate Camera ({rotation}°)
+          </button>
           
           <button 
             className="btn btn-primary btn-full" 

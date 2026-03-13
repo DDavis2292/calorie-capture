@@ -5,7 +5,7 @@ const BarcodeScanner = ({ onScan, onClose }) => {
   const scannerRef = useRef(null);
   const [isScanning, setIsScanning] = useState(false);
   const [detectedCode, setDetectedCode] = useState('');
-  const hasScannedRef = useRef(false); // Prevent multiple scans
+  const [scanning, setScanning] = useState(true);
 
   useEffect(() => {
     startScanner();
@@ -46,30 +46,36 @@ const BarcodeScanner = ({ onScan, onClose }) => {
     });
 
     Quagga.onDetected((result) => {
-      // Only process the first scan
-      if (hasScannedRef.current) return;
+      if (!scanning) return; // Ignore if user paused scanning
       
       const code = result.codeResult.code;
       console.log("Barcode detected:", code);
-      
-      hasScannedRef.current = true; // Mark as scanned
       setDetectedCode(code);
-      
-      // Stop scanner immediately
-      Quagga.stop();
-      setIsScanning(false);
-      
-      // Send barcode back to parent
-      onScan(code);
     });
   };
 
   const stopScanner = () => {
     if (isScanning) {
       Quagga.stop();
-      Quagga.offDetected(); // Remove event listener
+      Quagga.offDetected();
       setIsScanning(false);
     }
+  };
+
+  const confirmBarcode = () => {
+    if (detectedCode) {
+      stopScanner();
+      onScan(detectedCode);
+    }
+  };
+
+  const pauseScanning = () => {
+    setScanning(false);
+  };
+
+  const resumeScanning = () => {
+    setDetectedCode('');
+    setScanning(true);
   };
 
   return (
@@ -82,9 +88,19 @@ const BarcodeScanner = ({ onScan, onClose }) => {
       </div>
       
       {detectedCode ? (
-        <div className="status-message status-success">
-          ✓ Scanned: {detectedCode}
-        </div>
+        <>
+          <div className="status-message status-success">
+            Detected: {detectedCode}
+          </div>
+          
+          <button className="btn btn-primary btn-full" onClick={confirmBarcode}>
+            ✓ Use This Barcode
+          </button>
+          
+          <button className="btn btn-secondary btn-full" onClick={resumeScanning}>
+            ↻ Scan Again
+          </button>
+        </>
       ) : (
         <div className="status-message status-loading">
           Point camera at barcode...
