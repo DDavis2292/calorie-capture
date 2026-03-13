@@ -32,7 +32,7 @@ const FoodForm = ({ barcode, nutritionData, photoBlob, onComplete }) => {
 
       if (photoBlob) {
         const fileName = `${Date.now()}_${formData.name.replace(/\s/g, '_')}.jpg`;
-        const { data: uploadData, error: uploadError } = await supabase.storage
+        const { error: uploadError } = await supabase.storage
           .from('nutrition-labels')
           .upload(fileName, photoBlob);
 
@@ -45,7 +45,7 @@ const FoodForm = ({ barcode, nutritionData, photoBlob, onComplete }) => {
         imageUrl = publicUrl;
       }
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('foods')
         .insert([
           {

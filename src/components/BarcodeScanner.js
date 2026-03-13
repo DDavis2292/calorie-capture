@@ -6,9 +6,10 @@ const BarcodeScanner = ({ onScan, onClose }) => {
   const [isScanning, setIsScanning] = useState(false);
 
   useEffect(() => {
-    startScanner();
-    return () => stopScanner();
-  }, []);
+  startScanner();
+  return () => stopScanner();
+// eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
 
   const startScanner = () => {
     Quagga.init({

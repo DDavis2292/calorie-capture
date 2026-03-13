@@ -9,9 +9,10 @@ const CameraCapture = ({ onCapture, onClose }) => {
   const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
-    startCamera();
-    return () => stopCamera();
-  }, []);
+  startCamera();
+  return () => stopCamera();
+// eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
 
   const startCamera = async () => {
     try {
