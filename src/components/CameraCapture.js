@@ -72,7 +72,8 @@ const CameraCapture = ({ onCapture, onClose }) => {
     const mean = sum / count;
     const variance = (sumSq / count) - (mean * mean);
     
-    return variance > 500;
+    // RELAXED threshold: variance < 200 suggests blur (was 500)
+    return variance > 200;
   };
 
   const capturePhoto = async () => {
@@ -80,6 +81,13 @@ const CameraCapture = ({ onCapture, onClose }) => {
     
     const canvas = canvasRef.current;
     const video = videoRef.current;
+    
+    if (!video || !canvas) {
+      alert("Camera not ready. Please try again.");
+      setCapturing(false);
+      return;
+    }
+    
     const context = canvas.getContext('2d');
     
     canvas.width = video.videoWidth;
@@ -96,6 +104,12 @@ const CameraCapture = ({ onCapture, onClose }) => {
     }
     
     canvas.toBlob(async (blob) => {
+      if (!blob) {
+        alert("Failed to capture image. Please try again.");
+        setCapturing(false);
+        return;
+      }
+      
       setProcessing(true);
       
       try {
