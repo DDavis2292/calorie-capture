@@ -8,7 +8,7 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
   const [cameraReady, setCameraReady] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [ocrText, setOcrText] = useState('');
-  const [rotation, setRotation] = useState(0); // 0, 90, 180, 270
+  const [isPortrait, setIsPortrait] = useState(true); // Toggle between portrait/landscape viewport
 
   useEffect(() => {
     let mounted = true;
@@ -58,8 +58,8 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
     }
   };
 
-  const rotateCamera = () => {
-    setRotation((prev) => (prev + 90) % 360);
+  const toggleAspectRatio = () => {
+    setIsPortrait(!isPortrait);
   };
 
   const takePhoto = () => {
@@ -68,19 +68,9 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
     const canvas = document.createElement('canvas');
     const video = videoRef.current;
     
-    // Apply rotation to canvas
-    if (rotation === 90 || rotation === 270) {
-      canvas.width = video.videoHeight;
-      canvas.height = video.videoWidth;
-    } else {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-    }
-    
-    const ctx = canvas.getContext('2d');
-    ctx.translate(canvas.width / 2, canvas.height / 2);
-    ctx.rotate((rotation * Math.PI) / 180);
-    ctx.drawImage(video, -video.videoWidth / 2, -video.videoHeight / 2);
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
     
     canvas.toBlob((blob) => {
       const url = URL.createObjectURL(blob);
@@ -316,24 +306,22 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
     );
   }
 
+  // Choose viewport based on toggle
+  const viewportClass = isPortrait ? 'camera-viewport-large' : 'camera-viewport-wide';
+
   return (
     <div className="card">
       <h3 style={{ marginBottom: '16px', color: 'var(--accent-blue)' }}>
         {captureType === 'product' ? 'Capture Product Photo' : 'Capture Nutrition Label'}
       </h3>
       
-      <div className="camera-viewport-large">
+      <div className={viewportClass}>
         <video 
           ref={videoRef} 
           autoPlay 
           playsInline 
           muted
-          style={{ 
-            width: '100%', 
-            height: '100%', 
-            objectFit: 'cover',
-            transform: `rotate(${rotation}deg)`
-          }} 
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
         />
         <div className="camera-overlay-vertical"></div>
       </div>
@@ -350,15 +338,15 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
           <div className="status-message status-loading">
             {captureType === 'product' 
               ? 'Center product in frame' 
-              : 'Get CLOSE to label - fill the entire frame'}
+              : 'Get CLOSE - fill the entire frame with the label'}
           </div>
           
           <button 
-            className="btn btn-secondary btn-icon btn-full" 
-            onClick={rotateCamera}
+            className="btn btn-secondary btn-full" 
+            onClick={toggleAspectRatio}
             style={{ marginBottom: '12px' }}
           >
-            🔄 Rotate Camera ({rotation}°)
+            ⇄ Switch to {isPortrait ? 'Landscape' : 'Portrait'} Frame
           </button>
           
           <button 
