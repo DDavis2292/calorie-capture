@@ -15,12 +15,13 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
     const initCamera = async () => {
       try {
         const mediaStream = await navigator.mediaDevices.getUserMedia({
-          video: { 
-            facingMode: 'environment',
-            width: { ideal: 1920 },
-            height: { ideal: 1080 }
-          }
-        });
+  video: { 
+    facingMode: 'environment',
+    width: { ideal: 4032 },   // Higher resolution
+    height: { ideal: 3024 },
+    zoom: true                 // Enable zoom if supported
+  }
+});
         
         if (!mounted) {
           mediaStream.getTracks().forEach(track => track.stop());
@@ -151,13 +152,22 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
   canvas.height = video.videoHeight;
   context.drawImage(video, 0, 0);
   
-  // Detect and rotate image
-  const rotatedCanvas = await detectAndRotateImage(canvas);
+  // Only rotate for nutrition labels (product photos don't need it)
+  let finalCanvas = canvas;
+  if (captureType === 'nutrition') {
+    finalCanvas = await detectAndRotateImage(canvas);
+  }
   
   // Create original photo blob
   const originalBlob = await new Promise(resolve => {
-    rotatedCanvas.toBlob(blob => resolve(blob), 'image/jpeg', 0.95);
+    finalCanvas.toBlob(blob => resolve(blob), 'image/jpeg', 0.95);
   });
+  
+  if (!originalBlob) {
+    alert("Failed to capture photo. Please try again.");
+    setCapturing(false);
+    return;
+  }
   
   // For nutrition labels, do OCR (unless skipped)
   if (captureType === 'nutrition' && !skipOCR) {
@@ -165,10 +175,10 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
     
     try {
       const processedCanvas = document.createElement('canvas');
-      processedCanvas.width = rotatedCanvas.width;
-      processedCanvas.height = rotatedCanvas.height;
+      processedCanvas.width = finalCanvas.width;
+      processedCanvas.height = finalCanvas.height;
       const processedCtx = processedCanvas.getContext('2d');
-      processedCtx.drawImage(rotatedCanvas, 0, 0);
+      processedCtx.drawImage(finalCanvas, 0, 0);
       preprocessImage(processedCanvas);
       
       const processedBlob = await new Promise(resolve => {
@@ -193,7 +203,7 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
       stopCamera();
     }
   } else {
-    // For product photo or skipped OCR, just return the image
+    // For product photo or skipped OCR, just return the image immediately
     onCapture(originalBlob, captureType === 'nutrition' ? {} : null);
     stopCamera();
   }
@@ -287,6 +297,22 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
         <div className="camera-overlay-vertical"></div>
       </div>
       
+      <div className="camera-viewport-large">
+  <video 
+    ref={videoRef} 
+    autoPlay 
+    playsInline 
+    muted
+    style={{ 
+      width: '100%', 
+      height: '100%', 
+      objectFit: 'cover',
+      transform: 'scale(1.2)'  // Zoom in 20% by default
+    }} 
+  />
+  <div className="camera-overlay-vertical"></div>
+</div>
+
       <canvas ref={canvasRef} style={{ display: 'none' }} />
       
       {cameraReady && !processing && (
