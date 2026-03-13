@@ -9,15 +9,26 @@ const CameraCapture = ({ onCapture, onClose }) => {
   const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
-  startCamera();
-  return () => stopCamera();
-// eslint-disable-next-line react-hooks/exhaustive-deps
-}, []);
+    // Add a small delay to ensure previous camera is released
+    const timer = setTimeout(() => {
+      startCamera();
+    }, 300);
+    
+    return () => {
+      clearTimeout(timer);
+      stopCamera();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const startCamera = async () => {
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: 1920, height: 1080 }
+        video: { 
+          facingMode: 'environment',
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        }
       });
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
@@ -32,6 +43,10 @@ const CameraCapture = ({ onCapture, onClose }) => {
   const stopCamera = () => {
     if (stream) {
       stream.getTracks().forEach(track => track.stop());
+      setStream(null);
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
     }
   };
 
