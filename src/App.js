@@ -8,29 +8,38 @@ import FoodList from './components/FoodList';
 function App() {
   const [activeTab, setActiveTab] = useState('scan');
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
-  const [showCamera, setShowCamera] = useState(false);
+  const [showProductCamera, setShowProductCamera] = useState(false);
+  const [showNutritionCamera, setShowNutritionCamera] = useState(false);
   const [showForm, setShowForm] = useState(false);
   
   const [scannedBarcode, setScannedBarcode] = useState(null);
-  const [capturedPhoto, setCapturedPhoto] = useState(null);
+  const [productPhoto, setProductPhoto] = useState(null);
+  const [nutritionPhoto, setNutritionPhoto] = useState(null);
   const [nutritionData, setNutritionData] = useState(null);
 
   const handleBarcodeScanned = (barcode) => {
     setScannedBarcode(barcode);
     setShowBarcodeScanner(false);
-    setShowCamera(true);
+    setShowProductCamera(true);
   };
 
-  const handlePhotoCapture = (photoBlob, nutrition) => {
-    setCapturedPhoto(photoBlob);
+  const handleProductPhotoCapture = (photoBlob) => {
+    setProductPhoto(photoBlob);
+    setShowProductCamera(false);
+    setShowNutritionCamera(true);
+  };
+
+  const handleNutritionPhotoCapture = (photoBlob, nutrition) => {
+    setNutritionPhoto(photoBlob);
     setNutritionData(nutrition);
-    setShowCamera(false);
+    setShowNutritionCamera(false);
     setShowForm(true);
   };
 
   const handleFormComplete = () => {
     setScannedBarcode(null);
-    setCapturedPhoto(null);
+    setProductPhoto(null);
+    setNutritionPhoto(null);
     setNutritionData(null);
     setShowForm(false);
     setActiveTab('database');
@@ -38,10 +47,12 @@ function App() {
 
   const startNewScan = () => {
     setScannedBarcode(null);
-    setCapturedPhoto(null);
+    setProductPhoto(null);
+    setNutritionPhoto(null);
     setNutritionData(null);
     setShowForm(false);
-    setShowCamera(false);
+    setShowProductCamera(false);
+    setShowNutritionCamera(false);
     setShowBarcodeScanner(true);
   };
 
@@ -69,7 +80,7 @@ function App() {
 
       {activeTab === 'scan' && (
         <div>
-          {!showBarcodeScanner && !showCamera && !showForm && (
+          {!showBarcodeScanner && !showProductCamera && !showNutritionCamera && !showForm && (
             <div className="card">
               <h3 style={{ marginBottom: '20px', color: 'var(--accent-pink)' }}>
                 Start New Entry
@@ -78,10 +89,12 @@ function App() {
                 className="btn btn-primary btn-full"
                 onClick={startNewScan}
               >
-                📷 Scan Barcode & Capture Label
+                📷 Scan Barcode & Capture Photos
               </button>
               <p style={{ textAlign: 'center', color: 'var(--text-secondary)', marginTop: '16px', fontSize: '0.9rem' }}>
-                Scan product barcode, then photograph the nutrition label to add to your database
+                1. Scan barcode<br/>
+                2. Photo of product front<br/>
+                3. Photo of nutrition label
               </p>
             </div>
           )}
@@ -93,12 +106,24 @@ function App() {
             />
           )}
 
-          {showCamera && (
+          {showProductCamera && (
             <CameraCapture
-              onCapture={handlePhotoCapture}
+              captureType="product"
+              onCapture={handleProductPhotoCapture}
               onClose={() => {
-                setShowCamera(false);
+                setShowProductCamera(false);
                 setScannedBarcode(null);
+              }}
+            />
+          )}
+
+          {showNutritionCamera && (
+            <CameraCapture
+              captureType="nutrition"
+              onCapture={handleNutritionPhotoCapture}
+              onClose={() => {
+                setShowNutritionCamera(false);
+                setProductPhoto(null);
               }}
             />
           )}
@@ -106,8 +131,9 @@ function App() {
           {showForm && (
             <FoodForm
               barcode={scannedBarcode}
+              productPhoto={productPhoto}
+              nutritionPhoto={nutritionPhoto}
               nutritionData={nutritionData}
-              photoBlob={capturedPhoto}
               onComplete={handleFormComplete}
             />
           )}

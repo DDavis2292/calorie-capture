@@ -387,3 +387,57 @@ body {
     max-width: 600px;
   }
 }
+/* Large Vertical Camera Viewport for Nutrition Labels */
+.camera-viewport-large {
+  width: 100%;
+  height: 70vh; /* Takes up 70% of screen height */
+  max-height: 800px;
+  background: #000;
+  border-radius: 16px;
+  overflow: hidden;
+  margin-bottom: 16px;
+  position: relative;
+  box-shadow: 
+    8px 8px 16px var(--shadow-dark),
+    -8px -8px 16px var(--shadow-light);
+}
+
+.camera-viewport-large video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.camera-overlay-vertical {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 70%;
+  height: 85%;
+  border: 3px dashed var(--accent-pink);
+  border-radius: 12px;
+  pointer-events: none;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.3); /* Darken outside the frame */
+}
+
+/* Adjust for very tall phones */
+@media (max-height: 700px) {
+  .camera-viewport-large {
+    height: 60vh;
+  }
+}
+
+/* Nutrition Grid for Form */
+.nutrition-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-top: 16px;
+}
+
+@media (max-width: 600px) {
+  .nutrition-grid {
+    grid-template-columns: 1fr;
+  }
+}

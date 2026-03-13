@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import Tesseract from 'tesseract.js';
 
-const CameraCapture = ({ onCapture, onClose }) => {
+const CameraCapture = ({ onCapture, onClose, captureType }) => {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const [stream, setStream] = useState(null);
@@ -9,7 +9,6 @@ const CameraCapture = ({ onCapture, onClose }) => {
   const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
-    // Add a small delay to ensure previous camera is released
     const timer = setTimeout(() => {
       startCamera();
     }, 300);
@@ -26,8 +25,8 @@ const CameraCapture = ({ onCapture, onClose }) => {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { 
           facingMode: 'environment',
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
+          width: { ideal: 4032 },  // Take advantage of phone camera quality
+          height: { ideal: 3024 }
         }
       });
       if (videoRef.current) {
@@ -50,30 +49,26 @@ const CameraCapture = ({ onCapture, onClose }) => {
     }
   };
 
-  const checkBlur = (imageData) => {
-    const canvas = document.createElement('canvas');
+  const preprocessImage = (canvas) => {
     const ctx = canvas.getContext('2d');
-    canvas.width = imageData.width;
-    canvas.height = imageData.height;
-    ctx.putImageData(imageData, 0, 0);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
     
-    const gray = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const pixels = gray.data;
-    
-    let sum = 0;
-    let sumSq = 0;
-    for (let i = 0; i < pixels.length; i += 4) {
-      const value = pixels[i];
-      sum += value;
-      sumSq += value * value;
+    // Convert to grayscale and increase contrast
+    for (let i = 0; i < data.length; i += 4) {
+      const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+      // Increase contrast
+      const contrast = 1.5;
+      const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
+      const value = factor * (avg - 128) + 128;
+      
+      data[i] = value;
+      data[i + 1] = value;
+      data[i + 2] = value;
     }
     
-    const count = pixels.length / 4;
-    const mean = sum / count;
-    const variance = (sumSq / count) - (mean * mean);
-    
-    // RELAXED threshold: variance < 200 suggests blur (was 500)
-    return variance > 200;
+    ctx.putImageData(imageData, 0, 0);
+    return canvas;
   };
 
   const capturePhoto = async () => {
@@ -94,26 +89,29 @@ const CameraCapture = ({ onCapture, onClose }) => {
     canvas.height = video.videoHeight;
     context.drawImage(video, 0, 0);
     
-    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-    const isSharp = checkBlur(imageData);
+    // Create original photo blob
+    const originalBlob = await new Promise(resolve => {
+      canvas.toBlob(blob => resolve(blob), 'image/jpeg', 0.95);
+    });
     
-    if (!isSharp) {
-      alert("⚠️ Image is blurry. Please retake with better focus.");
-      setCapturing(false);
-      return;
-    }
-    
-    canvas.toBlob(async (blob) => {
-      if (!blob) {
-        alert("Failed to capture image. Please try again.");
-        setCapturing(false);
-        return;
-      }
-      
+    // For nutrition labels, do OCR
+    if (captureType === 'nutrition') {
       setProcessing(true);
       
       try {
-        const result = await Tesseract.recognize(blob, 'eng', {
+        // Preprocess for better OCR
+        const processedCanvas = document.createElement('canvas');
+        processedCanvas.width = canvas.width;
+        processedCanvas.height = canvas.height;
+        const processedCtx = processedCanvas.getContext('2d');
+        processedCtx.drawImage(canvas, 0, 0);
+        preprocessImage(processedCanvas);
+        
+        const processedBlob = await new Promise(resolve => {
+          processedCanvas.toBlob(blob => resolve(blob), 'image/jpeg', 1.0);
+        });
+        
+        const result = await Tesseract.recognize(processedBlob, 'eng', {
           logger: m => console.log(m)
         });
         
@@ -122,36 +120,104 @@ const CameraCapture = ({ onCapture, onClose }) => {
         
         const nutritionData = extractNutrition(text);
         
-        onCapture(blob, nutritionData);
+        onCapture(originalBlob, nutritionData);
         stopCamera();
       } catch (err) {
         console.error("OCR Error:", err);
-        alert("Failed to read label. Please try again.");
-        setProcessing(false);
-        setCapturing(false);
+        alert("Failed to read label. You can enter values manually.");
+        onCapture(originalBlob, {});
+        stopCamera();
       }
-    }, 'image/jpeg', 0.95);
+    } else {
+      // For product photo, just return the image
+      onCapture(originalBlob, null);
+      stopCamera();
+    }
   };
 
   const extractNutrition = (text) => {
     const data = {
+      servingSize: '',
       calories: 0,
+      totalFat: 0,
+      saturatedFat: 0,
+      transFat: 0,
+      cholesterol: 0,
+      sodium: 0,
+      totalCarbs: 0,
+      dietaryFiber: 0,
+      totalSugars: 0,
+      addedSugars: 0,
       protein: 0,
-      carbs: 0,
-      fat: 0
+      vitaminD: 0,
+      calcium: 0,
+      iron: 0,
+      potassium: 0
     };
     
-    const calMatch = text.match(/calories?\s*:?\s*(\d+)/i);
+    // Serving size
+    const servingMatch = text.match(/serving\s+size[:\s]+([^\n]+)/i);
+    if (servingMatch) data.servingSize = servingMatch[1].trim();
+    
+    // Calories
+    const calMatch = text.match(/calories[:\s]+(\d+)/i);
     if (calMatch) data.calories = parseInt(calMatch[1]);
     
-    const proteinMatch = text.match(/protein\s*:?\s*(\d+\.?\d*)\s*g/i);
+    // Total Fat
+    const totalFatMatch = text.match(/total\s+fat[:\s]+(\d+\.?\d*)\s*g/i);
+    if (totalFatMatch) data.totalFat = parseFloat(totalFatMatch[1]);
+    
+    // Saturated Fat
+    const satFatMatch = text.match(/saturated\s+fat[:\s]+(\d+\.?\d*)\s*g/i);
+    if (satFatMatch) data.saturatedFat = parseFloat(satFatMatch[1]);
+    
+    // Trans Fat
+    const transFatMatch = text.match(/trans\s+fat[:\s]+(\d+\.?\d*)\s*g/i);
+    if (transFatMatch) data.transFat = parseFloat(transFatMatch[1]);
+    
+    // Cholesterol
+    const cholMatch = text.match(/cholesterol[:\s]+(\d+\.?\d*)\s*mg/i);
+    if (cholMatch) data.cholesterol = parseFloat(cholMatch[1]);
+    
+    // Sodium
+    const sodiumMatch = text.match(/sodium[:\s]+(\d+\.?\d*)\s*mg/i);
+    if (sodiumMatch) data.sodium = parseFloat(sodiumMatch[1]);
+    
+    // Total Carbohydrate
+    const carbMatch = text.match(/total\s+carbohydrate[:\s]+(\d+\.?\d*)\s*g/i);
+    if (carbMatch) data.totalCarbs = parseFloat(carbMatch[1]);
+    
+    // Dietary Fiber
+    const fiberMatch = text.match(/dietary\s+fiber[:\s]+(\d+\.?\d*)\s*g/i);
+    if (fiberMatch) data.dietaryFiber = parseFloat(fiberMatch[1]);
+    
+    // Total Sugars
+    const sugarMatch = text.match(/total\s+sugars[:\s]+(\d+\.?\d*)\s*g/i);
+    if (sugarMatch) data.totalSugars = parseFloat(sugarMatch[1]);
+    
+    // Added Sugars
+    const addedSugarMatch = text.match(/added\s+sugars[:\s]+(\d+\.?\d*)\s*g/i);
+    if (addedSugarMatch) data.addedSugars = parseFloat(addedSugarMatch[1]);
+    
+    // Protein
+    const proteinMatch = text.match(/protein[:\s]+(\d+\.?\d*)\s*g/i);
     if (proteinMatch) data.protein = parseFloat(proteinMatch[1]);
     
-    const carbMatch = text.match(/carbohydrate|total carb|carbs?\s*:?\s*(\d+\.?\d*)\s*g/i);
-    if (carbMatch) data.carbs = parseFloat(carbMatch[1]);
+    // Vitamin D
+    const vitDMatch = text.match(/vitamin\s+d[:\s]+(\d+\.?\d*)\s*(mcg|μg)/i);
+    if (vitDMatch) data.vitaminD = parseFloat(vitDMatch[1]);
     
-    const fatMatch = text.match(/total fat|fat\s*:?\s*(\d+\.?\d*)\s*g/i);
-    if (fatMatch) data.fat = parseFloat(fatMatch[1]);
+    // Calcium
+    const calciumMatch = text.match(/calcium[:\s]+(\d+\.?\d*)\s*mg/i);
+    if (calciumMatch) data.calcium = parseFloat(calciumMatch[1]);
+    
+    // Iron
+    const ironMatch = text.match(/iron[:\s]+(\d+\.?\d*)\s*mg/i);
+    if (ironMatch) data.iron = parseFloat(ironMatch[1]);
+    
+    // Potassium
+    const potassiumMatch = text.match(/potassium[:\s]+(\d+\.?\d*)\s*mg/i);
+    if (potassiumMatch) data.potassium = parseFloat(potassiumMatch[1]);
     
     return data;
   };
@@ -159,12 +225,12 @@ const CameraCapture = ({ onCapture, onClose }) => {
   return (
     <div className="card">
       <h3 style={{ marginBottom: '16px', color: 'var(--accent-pink)' }}>
-        Capture Nutrition Label
+        {captureType === 'product' ? 'Capture Product Photo' : 'Capture Nutrition Label'}
       </h3>
       
-      <div className="camera-viewport">
+      <div className="camera-viewport-large">
         <video ref={videoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        <div className="camera-overlay"></div>
+        <div className="camera-overlay-vertical"></div>
       </div>
       
       <canvas ref={canvasRef} style={{ display: 'none' }} />
@@ -179,7 +245,9 @@ const CameraCapture = ({ onCapture, onClose }) => {
       {!processing && (
         <>
           <div className="status-message status-loading">
-            Position nutrition label in frame
+            {captureType === 'product' 
+              ? 'Center product in frame' 
+              : 'Position entire nutrition label in frame'}
           </div>
           
           <button 
@@ -187,7 +255,7 @@ const CameraCapture = ({ onCapture, onClose }) => {
             onClick={capturePhoto}
             disabled={capturing}
           >
-            {capturing ? 'Capturing...' : 'Capture Photo'}
+            {capturing ? 'Capturing...' : '📷 Capture Photo'}
           </button>
           
           <button className="btn btn-secondary btn-full" onClick={onClose}>

@@ -1,25 +1,38 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabaseClient';
 
-const FoodForm = ({ barcode, nutritionData, photoBlob, onComplete }) => {
+const FoodForm = ({ barcode, productPhoto, nutritionPhoto, nutritionData, onComplete }) => {
   const [formData, setFormData] = useState({
     name: '',
     brand: '',
     store: '',
     barcode: barcode || '',
+    servingSize: nutritionData?.servingSize || '',
     calories: nutritionData?.calories || 0,
+    totalFat: nutritionData?.totalFat || 0,
+    saturatedFat: nutritionData?.saturatedFat || 0,
+    transFat: nutritionData?.transFat || 0,
+    cholesterol: nutritionData?.cholesterol || 0,
+    sodium: nutritionData?.sodium || 0,
+    totalCarbs: nutritionData?.totalCarbs || 0,
+    dietaryFiber: nutritionData?.dietaryFiber || 0,
+    totalSugars: nutritionData?.totalSugars || 0,
+    addedSugars: nutritionData?.addedSugars || 0,
     protein: nutritionData?.protein || 0,
-    carbs: nutritionData?.carbs || 0,
-    fat: nutritionData?.fat || 0
+    vitaminD: nutritionData?.vitaminD || 0,
+    calcium: nutritionData?.calcium || 0,
+    iron: nutritionData?.iron || 0,
+    potassium: nutritionData?.potassium || 0
   });
   
   const [saving, setSaving] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    const isNumberField = !['name', 'brand', 'store', 'barcode', 'servingSize'].includes(name);
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'name' || name === 'brand' || name === 'store' ? value : parseFloat(value) || 0
+      [name]: isNumberField ? parseFloat(value) || 0 : value
     }));
   };
 
@@ -28,23 +41,42 @@ const FoodForm = ({ barcode, nutritionData, photoBlob, onComplete }) => {
     setSaving(true);
 
     try {
-      let imageUrl = null;
+      let productImageUrl = null;
+      let nutritionImageUrl = null;
 
-      if (photoBlob) {
-        const fileName = `${Date.now()}_${formData.name.replace(/\s/g, '_')}.jpg`;
-        const { error: uploadError } = await supabase.storage
+      // Upload product photo
+      if (productPhoto) {
+        const productFileName = `${Date.now()}_product_${formData.name.replace(/\s/g, '_')}.jpg`;
+        const { error: productUploadError } = await supabase.storage
           .from('nutrition-labels')
-          .upload(fileName, photoBlob);
+          .upload(productFileName, productPhoto);
 
-        if (uploadError) throw uploadError;
+        if (productUploadError) throw productUploadError;
 
-        const { data: { publicUrl } } = supabase.storage
+        const { data: { publicUrl: productUrl } } = supabase.storage
           .from('nutrition-labels')
-          .getPublicUrl(fileName);
+          .getPublicUrl(productFileName);
 
-        imageUrl = publicUrl;
+        productImageUrl = productUrl;
       }
 
+      // Upload nutrition label photo
+      if (nutritionPhoto) {
+        const nutritionFileName = `${Date.now()}_nutrition_${formData.name.replace(/\s/g, '_')}.jpg`;
+        const { error: nutritionUploadError } = await supabase.storage
+          .from('nutrition-labels')
+          .upload(nutritionFileName, nutritionPhoto);
+
+        if (nutritionUploadError) throw nutritionUploadError;
+
+        const { data: { publicUrl: nutritionUrl } } = supabase.storage
+          .from('nutrition-labels')
+          .getPublicUrl(nutritionFileName);
+
+        nutritionImageUrl = nutritionUrl;
+      }
+
+      // Insert food data
       const { error } = await supabase
         .from('foods')
         .insert([
@@ -53,11 +85,24 @@ const FoodForm = ({ barcode, nutritionData, photoBlob, onComplete }) => {
             brand: formData.brand,
             store: formData.store,
             barcode: formData.barcode,
+            serving_size: formData.servingSize,
             calories: formData.calories,
+            total_fat: formData.totalFat,
+            saturated_fat: formData.saturatedFat,
+            trans_fat: formData.transFat,
+            cholesterol: formData.cholesterol,
+            sodium: formData.sodium,
+            total_carbs: formData.totalCarbs,
+            dietary_fiber: formData.dietaryFiber,
+            total_sugars: formData.totalSugars,
+            added_sugars: formData.addedSugars,
             protein: formData.protein,
-            carbs: formData.carbs,
-            fat: formData.fat,
-            image_url: imageUrl
+            vitamin_d: formData.vitaminD,
+            calcium: formData.calcium,
+            iron: formData.iron,
+            potassium: formData.potassium,
+            product_image_url: productImageUrl,
+            nutrition_image_url: nutritionImageUrl
           }
         ]);
 
@@ -80,6 +125,7 @@ const FoodForm = ({ barcode, nutritionData, photoBlob, onComplete }) => {
       </h3>
 
       <form onSubmit={handleSubmit}>
+        {/* Basic Info */}
         <div className="input-group">
           <label className="input-label">Product Name *</label>
           <input
@@ -131,6 +177,23 @@ const FoodForm = ({ barcode, nutritionData, photoBlob, onComplete }) => {
         </div>
 
         <div className="input-group">
+          <label className="input-label">Serving Size</label>
+          <input
+            type="text"
+            name="servingSize"
+            className="input"
+            value={formData.servingSize}
+            onChange={handleChange}
+            placeholder="e.g., 1 bar (60g)"
+          />
+        </div>
+
+        {/* Nutrition Facts */}
+        <h4 style={{ color: 'var(--accent-pink)', marginTop: '24px', marginBottom: '16px' }}>
+          Nutrition Facts
+        </h4>
+
+        <div className="input-group">
           <label className="input-label">Calories</label>
           <input
             type="number"
@@ -142,46 +205,181 @@ const FoodForm = ({ barcode, nutritionData, photoBlob, onComplete }) => {
           />
         </div>
 
-        <div className="input-group">
-          <label className="input-label">Protein (g)</label>
-          <input
-            type="number"
-            name="protein"
-            className="input"
-            value={formData.protein}
-            onChange={handleChange}
-            step="0.1"
-          />
-        </div>
+        <div className="nutrition-grid">
+          <div className="input-group">
+            <label className="input-label">Total Fat (g)</label>
+            <input
+              type="number"
+              name="totalFat"
+              className="input"
+              value={formData.totalFat}
+              onChange={handleChange}
+              step="0.1"
+            />
+          </div>
 
-        <div className="input-group">
-          <label className="input-label">Carbs (g)</label>
-          <input
-            type="number"
-            name="carbs"
-            className="input"
-            value={formData.carbs}
-            onChange={handleChange}
-            step="0.1"
-          />
-        </div>
+          <div className="input-group">
+            <label className="input-label">Saturated Fat (g)</label>
+            <input
+              type="number"
+              name="saturatedFat"
+              className="input"
+              value={formData.saturatedFat}
+              onChange={handleChange}
+              step="0.1"
+            />
+          </div>
 
-        <div className="input-group">
-          <label className="input-label">Fat (g)</label>
-          <input
-            type="number"
-            name="fat"
-            className="input"
-            value={formData.fat}
-            onChange={handleChange}
-            step="0.1"
-          />
+          <div className="input-group">
+            <label className="input-label">Trans Fat (g)</label>
+            <input
+              type="number"
+              name="transFat"
+              className="input"
+              value={formData.transFat}
+              onChange={handleChange}
+              step="0.1"
+            />
+          </div>
+
+          <div className="input-group">
+            <label className="input-label">Cholesterol (mg)</label>
+            <input
+              type="number"
+              name="cholesterol"
+              className="input"
+              value={formData.cholesterol}
+              onChange={handleChange}
+              step="1"
+            />
+          </div>
+
+          <div className="input-group">
+            <label className="input-label">Sodium (mg)</label>
+            <input
+              type="number"
+              name="sodium"
+              className="input"
+              value={formData.sodium}
+              onChange={handleChange}
+              step="1"
+            />
+          </div>
+
+          <div className="input-group">
+            <label className="input-label">Total Carbs (g)</label>
+            <input
+              type="number"
+              name="totalCarbs"
+              className="input"
+              value={formData.totalCarbs}
+              onChange={handleChange}
+              step="0.1"
+            />
+          </div>
+
+          <div className="input-group">
+            <label className="input-label">Dietary Fiber (g)</label>
+            <input
+              type="number"
+              name="dietaryFiber"
+              className="input"
+              value={formData.dietaryFiber}
+              onChange={handleChange}
+              step="0.1"
+            />
+          </div>
+
+          <div className="input-group">
+            <label className="input-label">Total Sugars (g)</label>
+            <input
+              type="number"
+              name="totalSugars"
+              className="input"
+              value={formData.totalSugars}
+              onChange={handleChange}
+              step="0.1"
+            />
+          </div>
+
+          <div className="input-group">
+            <label className="input-label">Added Sugars (g)</label>
+            <input
+              type="number"
+              name="addedSugars"
+              className="input"
+              value={formData.addedSugars}
+              onChange={handleChange}
+              step="0.1"
+            />
+          </div>
+
+          <div className="input-group">
+            <label className="input-label">Protein (g)</label>
+            <input
+              type="number"
+              name="protein"
+              className="input"
+              value={formData.protein}
+              onChange={handleChange}
+              step="0.1"
+            />
+          </div>
+
+          <div className="input-group">
+            <label className="input-label">Vitamin D (mcg)</label>
+            <input
+              type="number"
+              name="vitaminD"
+              className="input"
+              value={formData.vitaminD}
+              onChange={handleChange}
+              step="0.1"
+            />
+          </div>
+
+          <div className="input-group">
+            <label className="input-label">Calcium (mg)</label>
+            <input
+              type="number"
+              name="calcium"
+              className="input"
+              value={formData.calcium}
+              onChange={handleChange}
+              step="1"
+            />
+          </div>
+
+          <div className="input-group">
+            <label className="input-label">Iron (mg)</label>
+            <input
+              type="number"
+              name="iron"
+              className="input"
+              value={formData.iron}
+              onChange={handleChange}
+              step="0.1"
+            />
+          </div>
+
+          <div className="input-group">
+            <label className="input-label">Potassium (mg)</label>
+            <input
+              type="number"
+              name="potassium"
+              className="input"
+              value={formData.potassium}
+              onChange={handleChange}
+              step="1"
+            />
+          </div>
         </div>
 
         <button 
           type="submit" 
           className="btn btn-primary btn-full"
           disabled={saving}
+          style={{ marginTop: '24px' }}
         >
           {saving ? 'Saving...' : '💾 Save Food'}
         </button>
