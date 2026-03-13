@@ -10,28 +10,28 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
   const [ocrText, setOcrText] = useState('');
 
   useEffect(() => {
-  let mounted = true;
+    let mounted = true;
     
-  const initCamera = async () => {
-    if (mounted) {
-      await startCamera();
-    }
-  };
-  
-  initCamera();
-  
-  return () => {
-    mounted = false;
-    stopCamera();
-  };
-}, []);
+    const initCamera = async () => {
+      if (mounted) {
+        await startCamera();
+      }
+    };
+    
+    initCamera();
+    
+    return () => {
+      mounted = false;
+      stopCamera();
+    };
+  }, []);
 
   const startCamera = async () => {
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { 
           facingMode: 'environment',
-          width: { ideal: 4032 },  // Max phone camera resolution
+          width: { ideal: 4032 },
           height: { ideal: 3024 }
         }
       });
@@ -70,63 +70,91 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
     canvas.toBlob((blob) => {
       const url = URL.createObjectURL(blob);
       setPhoto({ blob, url });
-    }, 'image/jpeg', 1.0);  // Max quality
+    }, 'image/jpeg', 1.0);
+  };
+
+  const preprocessImage = async (blob) => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        canvas.width = img.width;
+        canvas.height = img.height;
+        
+        ctx.drawImage(img, 0, 0);
+        
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        
+        for (let i = 0; i < data.length; i += 4) {
+          const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+          
+          const contrast = 2.0;
+          const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
+          let value = factor * (avg - 128) + 128;
+          
+          value = value > 128 ? 255 : 0;
+          
+          data[i] = value;
+          data[i + 1] = value;
+          data[i + 2] = value;
+        }
+        
+        ctx.putImageData(imageData, 0, 0);
+        
+        canvas.toBlob(resolve, 'image/jpeg', 1.0);
+      };
+      img.src = URL.createObjectURL(blob);
+    });
   };
 
   const confirmPhoto = async () => {
-  // STOP CAMERA FIRST - before any async operations
-  stopCamera();
-  
-  // Product photo - no OCR
-  if (captureType === 'product') {
-    onCapture(photo.blob);
-    return;
-  }
-  
-  // Nutrition label - do OCR
-  if (captureType === 'nutrition') {
-    setProcessing(true);
+    stopCamera();
     
-    try {
-      console.log("Starting OCR...");
-      
-      const result = await Tesseract.recognize(photo.blob, 'eng', {
-        logger: m => {
-          if (m.status === 'recognizing text') {
-            console.log(`Progress: ${Math.round(m.progress * 100)}%`);
-          }
-        }
-      });
-      
-      const text = result.data.text;
-      console.log("=== RAW OCR TEXT ===");
-      console.log(text);
-      console.log("===================");
-      
-      setOcrText(text);
-      
-      const nutritionData = extractNutrition(text);
-      console.log("Extracted nutrition:", nutritionData);
-      
-      onCapture(photo.blob, nutritionData);
-    } catch (err) {
-      console.error("OCR Error:", err);
-      alert("OCR failed. Check console for details.");
-      onCapture(photo.blob, {});
+    if (captureType === 'product') {
+      onCapture(photo.blob);
+      return;
     }
-  }
-};
-
-  const retakePhoto = () => {
-    URL.revokeObjectURL(photo.url);
-    setPhoto(null);
-    setOcrText('');
+    
+    if (captureType === 'nutrition') {
+      setProcessing(true);
+      
+      try {
+        console.log("Starting OCR with preprocessing...");
+        
+        const processedBlob = await preprocessImage(photo.blob);
+        
+        const result = await Tesseract.recognize(processedBlob, 'eng', {
+          logger: m => {
+            if (m.status === 'recognizing text') {
+              console.log(`Progress: ${Math.round(m.progress * 100)}%`);
+            }
+          },
+          tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz .,%:g()',
+        });
+        
+        const text = result.data.text;
+        console.log("=== RAW OCR TEXT ===");
+        console.log(text);
+        console.log("===================");
+        
+        setOcrText(text);
+        
+        const nutritionData = extractNutrition(text);
+        console.log("Extracted nutrition:", nutritionData);
+        
+        onCapture(photo.blob, nutritionData);
+      } catch (err) {
+        console.error("OCR Error:", err);
+        alert("OCR failed. You can enter values manually.");
+        onCapture(photo.blob, {});
+      }
+    }
   };
 
   const extractNutrition = (text) => {
-    // Clean up text - remove extra spaces and normalize
-    const cleanText = text.replace(/\s+/g, ' ').toLowerCase();
-    
     const data = {
       servingSize: '',
       calories: 0,
@@ -146,82 +174,78 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
       potassium: 0
     };
     
-    // More flexible regex patterns
+    const findValue = (keywords, unit = '') => {
+      for (const keyword of keywords) {
+        const pattern1 = new RegExp(keyword + '[\\s:]*([0-9]+\\.?[0-9]*)\\s*' + unit, 'i');
+        const match1 = text.match(pattern1);
+        if (match1) return parseFloat(match1[1]);
+        
+        const pattern2 = new RegExp(keyword + '[:\\s]+([0-9]+\\.?[0-9]*)', 'i');
+        const match2 = text.match(pattern2);
+        if (match2) return parseFloat(match2[1]);
+        
+        const pattern3 = new RegExp('([0-9]+\\.?[0-9]*)\\s*' + unit + '?\\s*' + keyword, 'i');
+        const match3 = text.match(pattern3);
+        if (match3) return parseFloat(match3[1]);
+      }
+      return null;
+    };
     
-    // Serving size - try multiple patterns
-    let servingMatch = text.match(/serving\s*size[:\s]*([^\n]+)/i);
-    if (!servingMatch) servingMatch = text.match(/servings?\s*per\s*container[:\s]*([^\n]+)/i);
+    const servingMatch = text.match(/serving\s*size[:\s]*([^\n]{5,40})/i);
     if (servingMatch) data.servingSize = servingMatch[1].trim();
     
-    // Calories - try multiple patterns
-    let calMatch = text.match(/calories[:\s]*(\d+)/i);
-    if (!calMatch) calMatch = text.match(/(\d+)\s*calories/i);
-    if (calMatch) data.calories = parseInt(calMatch[1]);
+    const cal = findValue(['calories', 'calorie', 'cal']);
+    if (cal !== null) data.calories = cal;
     
-    // Total Fat
-    let fatMatch = text.match(/total\s*fat[:\s]*(\d+\.?\d*)\s*g/i);
-    if (!fatMatch) fatMatch = text.match(/fat[:\s]*(\d+\.?\d*)\s*g/i);
-    if (fatMatch) data.totalFat = parseFloat(fatMatch[1]);
+    const fat = findValue(['total\\s*fat', 'fat'], 'g');
+    if (fat !== null) data.totalFat = fat;
     
-    // Saturated Fat
-    let satMatch = text.match(/saturated\s*fat[:\s]*(\d+\.?\d*)\s*g/i);
-    if (!satMatch) satMatch = text.match(/sat\.?\s*fat[:\s]*(\d+\.?\d*)\s*g/i);
-    if (satMatch) data.saturatedFat = parseFloat(satMatch[1]);
+    const satFat = findValue(['saturated\\s*fat', 'sat\\.?\\s*fat'], 'g');
+    if (satFat !== null) data.saturatedFat = satFat;
     
-    // Trans Fat
-    let transMatch = text.match(/trans\s*fat[:\s]*(\d+\.?\d*)\s*g/i);
-    if (transMatch) data.transFat = parseFloat(transMatch[1]);
+    const transFat = findValue(['trans\\s*fat'], 'g');
+    if (transFat !== null) data.transFat = transFat;
     
-    // Cholesterol
-    let cholMatch = text.match(/cholesterol[:\s]*(\d+\.?\d*)\s*mg/i);
-    if (cholMatch) data.cholesterol = parseFloat(cholMatch[1]);
+    const chol = findValue(['cholesterol', 'chol'], 'mg');
+    if (chol !== null) data.cholesterol = chol;
     
-    // Sodium
-    let sodiumMatch = text.match(/sodium[:\s]*(\d+\.?\d*)\s*mg/i);
-    if (sodiumMatch) data.sodium = parseFloat(sodiumMatch[1]);
+    const sodium = findValue(['sodium'], 'mg');
+    if (sodium !== null) data.sodium = sodium;
     
-    // Total Carbohydrate
-    let carbMatch = text.match(/total\s*carbohydrate[:\s]*(\d+\.?\d*)\s*g/i);
-    if (!carbMatch) carbMatch = text.match(/carbohydrate[:\s]*(\d+\.?\d*)\s*g/i);
-    if (!carbMatch) carbMatch = text.match(/carbs[:\s]*(\d+\.?\d*)\s*g/i);
-    if (carbMatch) data.totalCarbs = parseFloat(carbMatch[1]);
+    const carbs = findValue(['total\\s*carbohydrate', 'carbohydrate', 'carbs'], 'g');
+    if (carbs !== null) data.totalCarbs = carbs;
     
-    // Dietary Fiber
-    let fiberMatch = text.match(/dietary\s*fiber[:\s]*(\d+\.?\d*)\s*g/i);
-    if (!fiberMatch) fiberMatch = text.match(/fiber[:\s]*(\d+\.?\d*)\s*g/i);
-    if (fiberMatch) data.dietaryFiber = parseFloat(fiberMatch[1]);
+    const fiber = findValue(['dietary\\s*fiber', 'fiber'], 'g');
+    if (fiber !== null) data.dietaryFiber = fiber;
     
-    // Total Sugars
-    let sugarMatch = text.match(/total\s*sugars?[:\s]*(\d+\.?\d*)\s*g/i);
-    if (!sugarMatch) sugarMatch = text.match(/sugars?[:\s]*(\d+\.?\d*)\s*g/i);
-    if (sugarMatch) data.totalSugars = parseFloat(sugarMatch[1]);
+    const sugars = findValue(['total\\s*sugars', 'sugars'], 'g');
+    if (sugars !== null) data.totalSugars = sugars;
     
-    // Added Sugars
-    let addedMatch = text.match(/added\s*sugars?[:\s]*(\d+\.?\d*)\s*g/i);
-    if (!addedMatch) addedMatch = text.match(/includes\s*(\d+\.?\d*)\s*g\s*added\s*sugar/i);
-    if (addedMatch) data.addedSugars = parseFloat(addedMatch[1]);
+    const addedSugars = findValue(['added\\s*sugars', 'includes.*added\\s*sugar'], 'g');
+    if (addedSugars !== null) data.addedSugars = addedSugars;
     
-    // Protein
-    let proteinMatch = text.match(/protein[:\s]*(\d+\.?\d*)\s*g/i);
-    if (proteinMatch) data.protein = parseFloat(proteinMatch[1]);
+    const protein = findValue(['protein'], 'g');
+    if (protein !== null) data.protein = protein;
     
-    // Vitamin D
-    let vitDMatch = text.match(/vitamin\s*d[:\s]*(\d+\.?\d*)\s*(mcg|μg|ug)/i);
-    if (vitDMatch) data.vitaminD = parseFloat(vitDMatch[1]);
+    const vitD = findValue(['vitamin\\s*d'], '(mcg|μg|ug)');
+    if (vitD !== null) data.vitaminD = vitD;
     
-    // Calcium
-    let calciumMatch = text.match(/calcium[:\s]*(\d+\.?\d*)\s*mg/i);
-    if (calciumMatch) data.calcium = parseFloat(calciumMatch[1]);
+    const calcium = findValue(['calcium'], 'mg');
+    if (calcium !== null) data.calcium = calcium;
     
-    // Iron
-    let ironMatch = text.match(/iron[:\s]*(\d+\.?\d*)\s*mg/i);
-    if (ironMatch) data.iron = parseFloat(ironMatch[1]);
+    const iron = findValue(['iron'], 'mg');
+    if (iron !== null) data.iron = iron;
     
-    // Potassium
-    let potassiumMatch = text.match(/potassium[:\s]*(\d+\.?\d*)\s*mg/i);
-    if (potassiumMatch) data.potassium = parseFloat(potassiumMatch[1]);
+    const potassium = findValue(['potassium'], 'mg');
+    if (potassium !== null) data.potassium = potassium;
     
     return data;
+  };
+
+  const retakePhoto = () => {
+    URL.revokeObjectURL(photo.url);
+    setPhoto(null);
+    setOcrText('');
   };
 
   if (photo) {
@@ -306,7 +330,7 @@ const CameraCapture = ({ onCapture, onClose, captureType }) => {
           <div className="status-message status-loading">
             {captureType === 'product' 
               ? 'Center product in frame' 
-              : 'Get CLOSE to label and fill the frame completely'}
+              : 'Get CLOSE to label - fill the entire frame'}
           </div>
           
           <button 
